@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import FreshBasketHeader from "@/components/freshbasket-header";
-import { supabaseServer } from "@/lib/supabase-server";
+import { supabaseServer  } from "@/lib/supabase-server";
 import { supabase } from "@/lib/supabase-client";
 import ProductPickers from "@/components/product-pickers";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "FreshBasket — Live Inventory Tracking",
@@ -19,9 +20,7 @@ function productCode(row: Record<string, any>) {
   );
 }
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-async function fetchAllInventory(supabase: SupabaseClient) {
+async function fetchAllInventory(supabase: ReturnType<typeof createServerSupabase>) {
   const pageSize = 1000;
   const all: any[] = [];
   let offset = 0;
@@ -52,7 +51,7 @@ async function fetchAllInventory(supabase: SupabaseClient) {
 }
 
 async function fetchCategories(
-  _supabase: SupabaseClient,
+  _supabase: ReturnType<typeof createServerSupabase>,
   ids: Array<string | number>
 ) {
   const unique = Array.from(new Set(ids.filter((v) => v !== null && v !== undefined)));
@@ -129,6 +128,13 @@ export default async function ProductWiseDetailsPage() {
       <FreshBasketHeader />
 
       <section className="mx-auto w-full max-w-6xl px-6 py-8">
+        <div className="mb-4">
+          <Link href="/" aria-label="Back" className="inline-flex items-center text-gray-700 hover:text-gray-900">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </Link>
+        </div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Live Inventory Tracking</h1>
 
         <div className="mt-6 w-full">

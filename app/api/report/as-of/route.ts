@@ -63,8 +63,8 @@ export async function POST(req: Request) {
     if (!Array.isArray(warehouseIds) || warehouseIds.length === 0)
       return NextResponse.json({ error: "Select at least one warehouse" }, { status: 400 });
 
-    const supabase = supabaseServer
-    
+    const supabase = supabaseServer;
+
     type RowAgg = {
       warehouseId: string;
       productId: string;

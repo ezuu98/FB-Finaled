@@ -522,12 +522,12 @@ export function InventoryDashboard() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Product Details</CardTitle>
+                <CardTitle className="text-sm font-medium"></CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   <a href="/productwisedetails" className="text-blue-600 hover:underline">
-                    View Details
+                    Detailed Report
                   </a>
                 </div>
               </CardContent>
