@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Search, ChevronDown, User, LogOut, AlertTriangle, Edit, Database, RefreshCw } from "lucide-react"
+import { Search, ChevronDown, User, LogOut, AlertTriangle, Edit, Database, RefreshCw, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -51,7 +51,7 @@ export function InventoryDashboard() {
   const [lastSyncTimestamp, setLastSyncTimestamp] = useState<string | null>(null);
   const [lastSyncLoading, setLastSyncLoading] = useState(true);
   const [syncSince, setSyncSince] = useState<string>("");
-  
+
   const itemsPerPage = 30
 
   const {
@@ -80,7 +80,7 @@ export function InventoryDashboard() {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data.metadata) {
@@ -89,7 +89,7 @@ export function InventoryDashboard() {
             .map((item: any) => item.last_sync_timestamp)
             .filter((timestamp: string) => timestamp !== null)
             .map((timestamp: string) => new Date(timestamp));
-          
+
           if (timestamps.length > 0) {
             const mostRecent = new Date(Math.max(...timestamps.map((d: Date) => d.getTime())));
             setLastSyncTimestamp(mostRecent.toLocaleString());
@@ -142,7 +142,7 @@ export function InventoryDashboard() {
     try {
       // Call the sync API endpoint
       const sinceParam = syncSince ? `?since=${encodeURIComponent(new Date(syncSince).toISOString())}` : '';
-      const response = await fetch(process.env.NEXT_PUBLIC_API_URL+'/sync/all'+sinceParam, {
+      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + '/sync/all' + sinceParam, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,29 +162,29 @@ export function InventoryDashboard() {
       }
 
       const result = await response.json();
-      
+
       // Refresh the inventory data after successful sync
       await refetch();
-      
+
       // Refresh the last sync timestamp
       await fetchLastSyncTimestamp();
-      
+
       // Show success notification
       console.log('Sync completed successfully:', result);
-      
+
       // Optional: You can add a toast notification here
       // toast.success(`Successfully synced ${result.syncedCount || 'all'} items`);
-      
+
     } catch (error) {
       console.error('Sync failed:', error);
-      
+
       // Optional: You can add a toast notification here
       // toast.error(`Sync failed: ${error.message}`);
-      
+
       // For now, we'll just log the error
       // In a production app, you'd want to show this to the user
       alert(`Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      
+
     } finally {
       setIsSyncing(false);
     }
@@ -200,18 +200,18 @@ export function InventoryDashboard() {
   }
 
   // Transform Supabase data for display
-  const transformedInventory = useMemo(() => {  
+  const transformedInventory = useMemo(() => {
     if (!inventory || !Array.isArray(inventory)) {
       return [];
     }
-    
+
     return inventory.map((item) => {
       // Calculate total stock from all warehouses
       const totalStock = item.warehouse_inventory?.reduce((sum, wh) => {
         const stockQuantity = wh.stock_quantity !== undefined ? wh.stock_quantity : wh.quantity || 0;
         return sum + stockQuantity;
       }, 0) || 0;
-      
+
       const isLowStock = totalStock <= item.reordering_min_qty;
 
       return {
@@ -250,7 +250,7 @@ export function InventoryDashboard() {
 
       return matchesSearch && matchesCategory && matchesStockStatus
     })
-    
+
     return filtered;
   }, [transformedInventory, searchTerm, selectedCategories, stockStatus])
 
@@ -369,345 +369,356 @@ export function InventoryDashboard() {
     return <SkuDetailView sku={selectedSku} onBack={handleBackToDashboard} />
   }
 
-return (
-  <div className="min-h-screen bg-gray-50">
-    {/* Header */}
-    <header className="bg-white border-b border-gray-200 px-6 py-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-8">
-          <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-gray-800 rounded"></div>
-            <span className="text-xl font-semibold text-gray-900">FreshBasket</span>
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-8">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-gray-800 rounded"></div>
+              <span className="text-xl font-semibold text-gray-900">FreshBasket</span>
+            </div>
+          </div>
+          <div className="flex items-center space-x-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage
+                      src="/placeholder.svg"
+                      alt={user?.email || "User"}
+                    />
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <div className="flex items-center justify-start gap-2 p-2">
+                  <div className="flex flex-col space-y-1 leading-none">
+                    <p className="font-medium">{user?.email}</p>
+                    <p className="w-[200px] truncate text-sm text-muted-foreground">{user?.role || "User"}</p>
+                    <Badge variant="secondary" className="w-fit text-xs">
+                      {user?.role || "User"}
+                    </Badge>
+                  </div>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-        <div className="flex items-center space-x-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage
-                    src="/placeholder.svg"
-                    alt={user?.email || "User"}
-                  />
-                  <AvatarFallback>
-                    <User className="h-4 w-4" />
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <div className="flex items-center justify-start gap-2 p-2">
-                <div className="flex flex-col space-y-1 leading-none">
-                  <p className="font-medium">{user?.email}</p>
-                  <p className="w-[200px] truncate text-sm text-muted-foreground">{user?.role || "User"}</p>
-                  <Badge variant="secondary" className="w-fit text-xs">
-                    {user?.role || "User"}
-                  </Badge>
-                </div>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    </header>
+      </header>
 
-    {/* Main Content */}
-    <main className="px-6 py-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Live Inventory Tracking</h1>
-          <div className="flex flex-col items-end space-y-2">
-            <div className="flex space-x-2 items-end">
-              <div className="flex flex-col">
-                <label className="text-sm font-medium mb-1">Start date (optional)</label>
-                <input
-                  type="datetime-local"
-                  value={syncSince}
-                  onChange={(e) => setSyncSince(e.target.value)}
-                  className="border rounded px-2 py-1 text-sm"
-                />
-              </div>
-              <Button 
-                onClick={handleSyncAll} 
-                disabled={isSyncing}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Syncing...' : 'Sync All'}
-              </Button>
-              <Dialog open={showOdooSync} onOpenChange={setShowOdooSync}>
-                <DialogTrigger asChild>
-                  {/* <Button variant="outline">
+      {/* Main Content */}
+      <main className="px-6 py-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Live Inventory Tracking</h1>
+            <div className="flex flex-col items-end space-y-2">
+              <div className="flex space-x-2 items-end">
+                <div className="flex flex-col">
+                  <label className="text-sm font-medium mb-1">Start date (optional)</label>
+                  <input
+                    type="datetime-local"
+                    value={syncSince}
+                    onChange={(e) => setSyncSince(e.target.value)}
+                    className="border rounded px-2 py-1 text-sm"
+                  />
+                </div>
+                <Button
+                  onClick={handleSyncAll}
+                  disabled={isSyncing}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Syncing...' : 'Sync All'}
+                </Button>
+                <Dialog open={showOdooSync} onOpenChange={setShowOdooSync}>
+                  <DialogTrigger asChild>
+                    {/* <Button variant="outline">
                       <Database className="w-4 h-4 mr-2" />
                       Connect Odoo
                     </Button> */}
-                </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Odoo Integration</DialogTitle>
-                    <DialogDescription>Sync inventory data between Odoo and your FreshBasket system</DialogDescription>
-                  </DialogHeader>
-                  <OdooSyncPanel />
-                </DialogContent>
-              </Dialog>
-              {/* <AddProductModal onProductAdded={refetch} /> */}
-            </div>
-            
-            {/* Last Sync Timestamp */}
-            <div className="text-sm text-gray-500">
-              {lastSyncLoading ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400 mr-2"></div>
-                  Loading sync status...
-                </span>
-              ) : lastSyncTimestamp ? (
-                <span>Last sync: {lastSyncTimestamp}</span>
-              ) : (
-                <span>No sync data available</span>
-              )}
-            </div>
-          </div>
-        </div>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Odoo Integration</DialogTitle>
+                      <DialogDescription>Sync inventory data between Odoo and your FreshBasket system</DialogDescription>
+                    </DialogHeader>
+                    <OdooSyncPanel />
+                  </DialogContent>
+                </Dialog>
+                {/* <AddProductModal onProductAdded={refetch} /> */}
+              </div>
 
-        {/* Dashboard Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {loading ? (
-                  <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
+              {/* Last Sync Timestamp */}
+              <div className="text-sm text-gray-500">
+                {lastSyncLoading ? (
+                  <span className="flex items-center">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400 mr-2"></div>
+                    Loading sync status...
+                  </span>
+                ) : lastSyncTimestamp ? (
+                  <span>Last sync: {lastSyncTimestamp}</span>
                 ) : (
-                  totalItems
+                  <span>No sync data available</span>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-orange-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">
-                {loading ? (
-                  <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
-                ) : (
-                  lowStockCount
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {loading ? (
-                  <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
-                ) : (
-                  outOfStockCount
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex flex-col space-y-4">
-            {/* Search Bar with Export Button and Date Dropdowns */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="by SKU Product Name or Barcode"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSearchTerm(value);
-                    if (value.trim()) {
-                      debouncedSearch(value);
-                    } else {
-                      setPage(1);
-                      searchInventory("");
-                    }
-                  }}
-                  className="pl-10 bg-gray-50 border-gray-200"
-                />
-              </div>
-              <div className="flex items-center gap-2 md:gap-4">
-                {/* Stock Corrections Upload */}
-                <StockCorrectionsUpload />
-
-                {/* Export Button */}
-                <ExportInventory
-                  filteredData={paginatedData}
-                  searchTerm={searchTerm}
-                  category={selectedCategories.length ? selectedCategories.join(", ") : "All Categories"}
-                  stockStatus={stockStatus}
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center flex-wrap gap-4">
-              {/* Left Filters */}
-              <div className="flex space-x-4">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-80 justify-between">
-                      <span className="truncate text-left">
-                        {selectedCategories.length === 0
-                          ? "All Categories"
-                          : selectedCategories.length <= 2
-                            ? selectedCategories.join(", ")
-                            : `${selectedCategories.slice(0, 2).join(", ")} +${selectedCategories.length - 2} more`}
-                      </span>
-                      <ChevronDown className="w-4 h-4 opacity-50 flex-shrink-0 ml-2" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-80 max-h-[400px] overflow-auto">
-                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                      <Checkbox
-                        checked={selectedCategories.length === 0}
-                        onCheckedChange={() => setSelectedCategories([])}
-                      />
-                      <span className="ml-2">All Categories</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {availableCategories.map((cat) => {
-                      const checked = selectedCategories.includes(cat)
-                      return (
-                        <DropdownMenuItem key={cat} onSelect={(e) => e.preventDefault()}>
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(isChecked) => {
-                              if (isChecked) {
-                                setSelectedCategories((prev) => Array.from(new Set([...prev, cat])))
-                              } else {
-                                setSelectedCategories((prev) => prev.filter((c) => c !== cat))
-                              }
-                            }}
-                          />
-                          <span className="ml-2 break-words">{cat}</span>
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Select value={stockStatus} onValueChange={setStockStatus}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Stock Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All Status">All Status</SelectItem>
-                    <SelectItem value="in-stock">In Stock</SelectItem>
-                    <SelectItem value="low-stock">Low Stock</SelectItem>
-                    <SelectItem value="out-of-stock">Out of Stock</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Inventory Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50">
-                <TableHead className="font-medium text-gray-700">Barcode</TableHead>
-                <TableHead className="font-medium text-gray-700">Product</TableHead>
-                <TableHead className="font-medium text-gray-700">Category</TableHead>
-                <TableHead className="font-medium text-gray-700 text-center">Status</TableHead>
-                <TableHead className="font-medium text-gray-700 text-center">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedData.map((item, index) => (
-                <TableRow key={index} className="hover:bg-gray-50">
-                  <TableCell className="font-mono text-sm text-blue-600">{item.barcode}</TableCell>
-                  <TableCell className="font-medium">
-                    <button
-                      onClick={() => handleSkuClick(item.originalData)}
-                      className="text-blue-600 hover:text-blue-800 hover:underline text-left"
-                    >
-                      {item.product}
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {item.category}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {item.totalStock === 0 ? (
-                      <Badge variant="destructive">Out of Stock</Badge>
-                    ) : item.isLowStock ? (
-                      <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-                        Low Stock
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">
-                        In Stock
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <EditProductModal
-                      product={item.originalData as unknown as any}
-                      onProductUpdated={refetch}
-                      trigger={
-                        <Button variant="outline" size="sm">
-                          <Edit className="w-3 h-3 mr-1" />
-                          Edit
-                        </Button>
+          {/* Dashboard Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {loading ? (
+                    <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
+                  ) : (
+                    totalItems
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-orange-600">
+                  {loading ? (
+                    <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
+                  ) : (
+                    lowStockCount
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">
+                  {loading ? (
+                    <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
+                  ) : (
+                    outOfStockCount
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Product Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  <a href="/productwisedetails" className="text-blue-600 hover:underline">
+                    View Details
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          {/* Search and Filters */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <div className="flex flex-col space-y-4">
+              {/* Search Bar with Export Button and Date Dropdowns */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="by SKU Product Name or Barcode"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearchTerm(value);
+                      if (value.trim()) {
+                        debouncedSearch(value);
+                      } else {
+                        setPage(1);
+                        searchInventory("");
                       }
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="flex justify-between items-center py-4 px-6">
-            <div className="text-sm text-gray-600">
-                              Showing {(page - 1) * itemsPerPage + 1} to {Math.min(page * itemsPerPage, actualTotalItems)} of {actualTotalItems} entries
+                    }}
+                    className="pl-10 bg-gray-50 border-gray-200"
+                  />
+                </div>
+                <div className="flex items-center gap-2 md:gap-4">
+                  {/* Stock Corrections Upload */}
+                  <StockCorrectionsUpload />
+
+                  {/* Export Button */}
+                  <ExportInventory
+                    filteredData={paginatedData}
+                    searchTerm={searchTerm}
+                    category={selectedCategories.length ? selectedCategories.join(", ") : "All Categories"}
+                    stockStatus={stockStatus}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                {/* Left Filters */}
+                <div className="flex space-x-4">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="w-80 justify-between">
+                        <span className="truncate text-left">
+                          {selectedCategories.length === 0
+                            ? "All Categories"
+                            : selectedCategories.length <= 2
+                              ? selectedCategories.join(", ")
+                              : `${selectedCategories.slice(0, 2).join(", ")} +${selectedCategories.length - 2} more`}
+                        </span>
+                        <ChevronDown className="w-4 h-4 opacity-50 flex-shrink-0 ml-2" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-80 max-h-[400px] overflow-auto">
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <Checkbox
+                          checked={selectedCategories.length === 0}
+                          onCheckedChange={() => setSelectedCategories([])}
+                        />
+                        <span className="ml-2">All Categories</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      {availableCategories.map((cat) => {
+                        const checked = selectedCategories.includes(cat)
+                        return (
+                          <DropdownMenuItem key={cat} onSelect={(e) => e.preventDefault()}>
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(isChecked) => {
+                                if (isChecked) {
+                                  setSelectedCategories((prev) => Array.from(new Set([...prev, cat])))
+                                } else {
+                                  setSelectedCategories((prev) => prev.filter((c) => c !== cat))
+                                }
+                              }}
+                            />
+                            <span className="ml-2 break-words">{cat}</span>
+                          </DropdownMenuItem>
+                        )
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <Select value={stockStatus} onValueChange={setStockStatus}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Stock Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All Status">All Status</SelectItem>
+                      <SelectItem value="in-stock">In Stock</SelectItem>
+                      <SelectItem value="low-stock">Low Stock</SelectItem>
+                      <SelectItem value="out-of-stock">Out of Stock</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={handlePreviousPage}
-              >
-                Previous
-              </Button>
-              <span className="flex items-center px-3 py-1 text-sm text-gray-600">
-                Page {page} of {Math.ceil(actualTotalItems / itemsPerPage)}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                                  disabled={page >= Math.ceil(actualTotalItems / itemsPerPage)}
-                onClick={handleNextPage}
-              >
-                Next
-              </Button>
+          </div>
+
+          {/* Inventory Table */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50">
+                  <TableHead className="font-medium text-gray-700">Barcode</TableHead>
+                  <TableHead className="font-medium text-gray-700">Product</TableHead>
+                  <TableHead className="font-medium text-gray-700">Category</TableHead>
+                  <TableHead className="font-medium text-gray-700 text-center">Status</TableHead>
+                  <TableHead className="font-medium text-gray-700 text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedData.map((item, index) => (
+                  <TableRow key={index} className="hover:bg-gray-50">
+                    <TableCell className="font-mono text-sm text-blue-600">{item.barcode}</TableCell>
+                    <TableCell className="font-medium">
+                      <button
+                        onClick={() => handleSkuClick(item.originalData)}
+                        className="text-blue-600 hover:text-blue-800 hover:underline text-left"
+                      >
+                        {item.product}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {item.category}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {item.totalStock === 0 ? (
+                        <Badge variant="destructive">Out of Stock</Badge>
+                      ) : item.isLowStock ? (
+                        <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                          Low Stock
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-green-100 text-green-800">
+                          In Stock
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <EditProductModal
+                        product={item.originalData as unknown as any}
+                        onProductUpdated={refetch}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            <Edit className="w-3 h-3 mr-1" />
+                            Edit
+                          </Button>
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="flex justify-between items-center py-4 px-6">
+              <div className="text-sm text-gray-600">
+                Showing {(page - 1) * itemsPerPage + 1} to {Math.min(page * itemsPerPage, actualTotalItems)} of {actualTotalItems} entries
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 1}
+                  onClick={handlePreviousPage}
+                >
+                  Previous
+                </Button>
+                <span className="flex items-center px-3 py-1 text-sm text-gray-600">
+                  Page {page} of {Math.ceil(actualTotalItems / itemsPerPage)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= Math.ceil(actualTotalItems / itemsPerPage)}
+                  onClick={handleNextPage}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </main>
-  </div>
-)
+      </main>
+    </div>
+  )
 }
