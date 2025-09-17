@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import ProductWiseDetailsPageClient from "@/components/productwise-details-page"
 import { SkuDetailView } from "./sku-detail-view"
 import { useInventory } from "@/hooks/use-inventory"
 import { useAuth } from "@/hooks/use-auth"
@@ -51,6 +52,7 @@ export function InventoryDashboard() {
   const [lastSyncTimestamp, setLastSyncTimestamp] = useState<string | null>(null);
   const [lastSyncLoading, setLastSyncLoading] = useState(true);
   const [syncSince, setSyncSince] = useState<string>("");
+  const [showDetails, setShowDetails] = useState(false);
 
   const itemsPerPage = 30
 
@@ -526,13 +528,22 @@ export function InventoryDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  <a href="/productwisedetails" className="text-blue-600 hover:underline">
+                  <button onClick={() => setShowDetails(true)} className="text-blue-600 hover:underline">
                     View Details
-                  </a>
+                  </button>
                 </div>
               </CardContent>
             </Card>
           </div>
+          {showDetails && (
+            <div className="mt-6">
+              <div className="mb-2 flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowDetails(false)}>Hide Details</Button>
+              </div>
+              <ProductWiseDetailsPageClient />
+            </div>
+          )}
+
           {/* Search and Filters */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
             <div className="flex flex-col space-y-4">
