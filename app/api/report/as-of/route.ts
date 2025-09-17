@@ -63,8 +63,8 @@ export async function POST(req: Request) {
     if (!Array.isArray(warehouseIds) || warehouseIds.length === 0)
       return NextResponse.json({ error: "Select at least one warehouse" }, { status: 400 });
 
-    const supabase = supabaseServer;
-
+    const supabase = supabaseServer
+    
     type RowAgg = {
       warehouseId: string;
       productId: string;
@@ -80,34 +80,41 @@ export async function POST(req: Request) {
 
     // 1) Opening stock from warehouse_inventory (wh_id, product_id, quantity)
     {
+      const chunk = <T,>(arr: T[], size: number) => {
+        const out: T[][] = [];
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+        return out;
+      };
       const pageSize = 1000;
-      let offset = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from("warehouse_inventory")
-          .select("wh_id, product_id, quantity")
-          .in("product_id", productIds)
-          .in("wh_id", warehouseIds)
-          .order("product_id", { ascending: true })
-          .order("wh_id", { ascending: true })
-          .range(offset, offset + pageSize - 1);
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-        for (const row of data ?? []) {
-          const warehouseId = String(row.wh_id);
-          const productId = String(row.product_id);
-          const key = `${warehouseId}|${productId}`;
-          const opening = Number(row.quantity || 0);
-          let agg = map.get(key);
-          if (!agg) {
-            agg = { warehouseId, productId, opening: 0, adjustments: 0, moves: {} };
-            map.set(key, agg);
+      for (const pids of chunk(productIds, 200)) {
+        let offset = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from("warehouse_inventory")
+            .select("wh_id, product_id, quantity")
+            .in("product_id", pids)
+            .in("wh_id", warehouseIds)
+            .order("product_id", { ascending: true })
+            .order("wh_id", { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+          for (const row of data ?? []) {
+            const warehouseId = String(row.wh_id);
+            const productId = String(row.product_id);
+            const key = `${warehouseId}|${productId}`;
+            const opening = Number(row.quantity || 0);
+            let agg = map.get(key);
+            if (!agg) {
+              agg = { warehouseId, productId, opening: 0, adjustments: 0, moves: {} };
+              map.set(key, agg);
+            }
+            agg.opening += opening;
+            totals.opening = (totals.opening ?? 0) + opening;
           }
-          agg.opening += opening;
-          totals.opening = (totals.opening ?? 0) + opening;
+          if (!data || data.length < pageSize) break;
+          offset += pageSize;
+          if (offset > 500000) break; // safety cap
         }
-        if (!data || data.length < pageSize) break;
-        offset += pageSize;
-        if (offset > 500000) break; // safety cap
       }
     }
 
@@ -129,40 +136,47 @@ export async function POST(req: Request) {
     for (const mv of movementList) {
       const col = pickWarehouseColumn(mv);
       const pageSize = 1000;
-      let offset = 0;
-      while (true) {
-        let query = supabase
-          .from("stock_movements")
-          .select("id, product_id, warehouse_id, warehouse_dest_id, movement_type, quantity, created_at")
-          .in("movement_type", MOVEMENT_ALIASES[mv] ?? [mv])
-          .in("product_id", productIds)
-          .order("created_at", { ascending: true })
-          .order("id", { ascending: true })
-          .range(offset, offset + pageSize - 1);
-        if (warehouseIds?.length) {
-          // @ts-ignore dynamic column name
-          query = query.in(col as any, warehouseIds);
-        }
-        if (startISO) query = query.gte("created_at", startISO);
-        if (endISO) query = query.lt("created_at", endISO);
-        const { data, error } = await query;
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-        for (const row of data ?? []) {
-          const warehouseId = String(row[col as keyof typeof row]);
-          const productId = String(row.product_id);
-          const key = `${warehouseId}|${productId}`;
-          const qty = Math.abs(Number(row.quantity ?? 0));
-          let agg = map.get(key);
-          if (!agg) {
-            agg = { warehouseId, productId, opening: 0, adjustments: 0, moves: {} };
-            map.set(key, agg);
+      const chunk = <T,>(arr: T[], size: number) => {
+        const out: T[][] = [];
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+        return out;
+      };
+      for (const pids of chunk(productIds, 200)) {
+        let offset = 0;
+        while (true) {
+          let query = supabase
+            .from("stock_movements")
+            .select("id, product_id, warehouse_id, warehouse_dest_id, movement_type, quantity, created_at")
+            .in("movement_type", MOVEMENT_ALIASES[mv] ?? [mv])
+            .in("product_id", pids)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (warehouseIds?.length) {
+            // @ts-ignore dynamic column name
+            query = query.in(col as any, warehouseIds);
           }
-          agg.moves[mv] = (agg.moves[mv] ?? 0) + qty;
-          totals[mv] = (totals[mv] ?? 0) + qty;
+          if (startISO) query = query.gte("created_at", startISO);
+          if (endISO) query = query.lt("created_at", endISO);
+          const { data, error } = await query;
+          if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+          for (const row of data ?? []) {
+            const warehouseId = String(row[col as keyof typeof row]);
+            const productId = String(row.product_id);
+            const key = `${warehouseId}|${productId}`;
+            const qty = Math.abs(Number(row.quantity ?? 0));
+            let agg = map.get(key);
+            if (!agg) {
+              agg = { warehouseId, productId, opening: 0, adjustments: 0, moves: {} };
+              map.set(key, agg);
+            }
+            agg.moves[mv] = (agg.moves[mv] ?? 0) + qty;
+            totals[mv] = (totals[mv] ?? 0) + qty;
+          }
+          if (!data || data.length < pageSize) break;
+          offset += pageSize;
+          if (offset > 500000) break;
         }
-        if (!data || data.length < pageSize) break;
-        offset += pageSize;
-        if (offset > 500000) break;
       }
     }
 
@@ -207,65 +221,72 @@ export async function POST(req: Request) {
       const numericIdSet = new Set((warehouseIds || []).map((v: any) => String(v)));
 
       const pageSize = 1000;
-      let offset = 0;
-      const runAndAccumulate = async (table: string) => {
-        let query = supabase
-          .from(table)
-          .select("id, product_id, warehouse_id, variance_quantity, correction_date")
-          .in("product_id", productIds)
-          .order("correction_date", { ascending: true })
-          .range(offset, offset + pageSize - 1);
-        if (useFromDate) query = query.gte("correction_date", useFromDate);
-        if (useToDate) query = query.lte("correction_date", useToDate);
-        const { data, error } = await query;
-        if (error) return { data: [] as any[], error };
-        return { data: (data as any[]) ?? [], error: null };
+      const chunk = <T,>(arr: T[], size: number) => {
+        const out: T[][] = [];
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+        return out;
       };
+      for (const pids of chunk(productIds, 200)) {
+        let offset = 0;
+        const runAndAccumulate = async (table: string) => {
+          let query = supabase
+            .from(table)
+            .select("id, product_id, warehouse_id, variance_quantity, correction_date")
+            .in("product_id", pids)
+            .order("correction_date", { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (useFromDate) query = query.gte("correction_date", useFromDate);
+          if (useToDate) query = query.lte("correction_date", useToDate);
+          const { data, error } = await query;
+          if (error) return { data: [] as any[], error };
+          return { data: (data as any[]) ?? [], error: null };
+        };
 
-      // We'll try multiple variants and merge results
-      while (true) {
-        let rows: any[] = [];
-        let err: any = null;
+        // We'll try multiple variants and merge results
+        while (true) {
+          let rows: any[] = [];
+          let err: any = null;
 
-        // Try stock_corrections (uuid, correction_date)
-        ({ data: rows, error: err } = await runAndAccumulate("stock_corrections"));
+          // Try stock_corrections (uuid, correction_date)
+          ({ data: rows, error: err } = await runAndAccumulate("stock_corrections"));
 
-        if (err && !rows.length) {
-          // If truly an error and no data, surface it
-          return NextResponse.json({ error: err.message }, { status: 500 });
-        }
+          if (err && !rows.length) {
+            // If truly an error and no data, surface it
+            return NextResponse.json({ error: err.message }, { status: 500 });
+          }
 
-        for (const row of rows) {
-          const rawWh = (row as any).warehouse_id;
-          const whUuid = typeof rawWh === "string" ? rawWh : "";
-          let warehouseId = "";
-          if (whUuid) warehouseId = uuidToId.get(whUuid) || whUuid; // map uuid->id or keep uuid
-          // If we still don't have a numeric match to the selected list, skip
-          if (warehouseId && !numericIdSet.has(String(warehouseId))) {
-            if (whUuid) {
-              const mapped = uuidToId.get(whUuid);
-              if (!mapped || !numericIdSet.has(String(mapped))) continue;
-              warehouseId = String(mapped);
-            } else {
-              continue;
+          for (const row of rows) {
+            const rawWh = (row as any).warehouse_id;
+            const whUuid = typeof rawWh === "string" ? rawWh : "";
+            let warehouseId = "";
+            if (whUuid) warehouseId = uuidToId.get(whUuid) || whUuid; // map uuid->id or keep uuid
+            // If we still don't have a numeric match to the selected list, skip
+            if (warehouseId && !numericIdSet.has(String(warehouseId))) {
+              if (whUuid) {
+                const mapped = uuidToId.get(whUuid);
+                if (!mapped || !numericIdSet.has(String(mapped))) continue;
+                warehouseId = String(mapped);
+              } else {
+                continue;
+              }
             }
+            const productId = String((row as any).product_id);
+            const key = `${warehouseId}|${productId}`;
+            const qty = Number((row as any).variance_quantity ?? 0);
+            if (!Number.isFinite(qty)) continue;
+            let agg = map.get(key);
+            if (!agg) {
+              agg = { warehouseId, productId, opening: 0, adjustments: 0, moves: {} };
+              map.set(key, agg);
+            }
+            agg.adjustments = (agg.adjustments ?? 0) + qty;
+            totals.adjustments = (totals.adjustments ?? 0) + qty;
           }
-          const productId = String((row as any).product_id);
-          const key = `${warehouseId}|${productId}`;
-          const qty = Number((row as any).variance_quantity ?? 0);
-          if (!Number.isFinite(qty)) continue;
-          let agg = map.get(key);
-          if (!agg) {
-            agg = { warehouseId, productId, opening: 0, adjustments: 0, moves: {} };
-            map.set(key, agg);
-          }
-          agg.adjustments = (agg.adjustments ?? 0) + qty;
-          totals.adjustments = (totals.adjustments ?? 0) + qty;
-        }
 
-        if (!rows || rows.length < pageSize) break;
-        offset += pageSize;
-        if (offset > 500000) break;
+          if (!rows || rows.length < pageSize) break;
+          offset += pageSize;
+          if (offset > 500000) break;
+        }
       }
     }
 

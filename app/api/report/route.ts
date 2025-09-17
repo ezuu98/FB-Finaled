@@ -67,51 +67,58 @@ export async function POST(req: Request) {
     const startISO = toUtcStart(fromDate || null);
     const endISO = nextUtcStart(toDate || null);
 
+    const chunk = <T,>(arr: T[], size: number) => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    };
+
     for (const mv of movements as string[]) {
       const col = pickWarehouseColumn(mv);
-
       const pageSize = 1000;
-      let offset = 0;
 
-      while (true) {
-        let query = supabase
-          .from("stock_movements")
-          .select("id, product_id, warehouse_id, warehouse_dest_id, movement_type, quantity, created_at")
-          .in("movement_type", MOVEMENT_ALIASES[mv] ?? [mv])
-          .in("product_id", productIds)
-          .order("created_at", { ascending: true })
-          .order("id", { ascending: true })
-          .range(offset, offset + pageSize - 1);
+      for (const pids of chunk(productIds, 200)) {
+        let offset = 0;
+        while (true) {
+          let query = supabase
+            .from("stock_movements")
+            .select("id, product_id, warehouse_id, warehouse_dest_id, movement_type, quantity, created_at")
+            .in("movement_type", MOVEMENT_ALIASES[mv] ?? [mv])
+            .in("product_id", pids)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(offset, offset + pageSize - 1);
 
-        if (warehouseIds?.length) {
-          // @ts-ignore dynamic column name
-          query = query.in(col as any, warehouseIds);
-        }
-        if (startISO) query = query.gte("created_at", startISO);
-        if (endISO) query = query.lt("created_at", endISO);
-
-        const { data, error } = await query;
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-        for (const row of data ?? []) {
-          const warehouseId = String(row[col as keyof typeof row]);
-          const productId = String(row.product_id);
-          const key = `${warehouseId}|${productId}`;
-          const rawQty = Number(row.quantity ?? 0);
-          const qty = Math.abs(rawQty);
-
-          let agg = map.get(key);
-          if (!agg) {
-            agg = { warehouseId, productId, moves: {} };
-            map.set(key, agg);
+          if (warehouseIds?.length) {
+            // @ts-ignore dynamic column name
+            query = query.in(col as any, warehouseIds);
           }
-          agg.moves[mv] = (agg.moves[mv] ?? 0) + qty;
-          totals[mv] = (totals[mv] ?? 0) + qty;
-        }
+          if (startISO) query = query.gte("created_at", startISO);
+          if (endISO) query = query.lt("created_at", endISO);
 
-        if (!data || data.length < pageSize) break;
-        offset += pageSize;
-        if (offset > 500000) break; // safety cap
+          const { data, error } = await query;
+          if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+          for (const row of data ?? []) {
+            const warehouseId = String(row[col as keyof typeof row]);
+            const productId = String(row.product_id);
+            const key = `${warehouseId}|${productId}`;
+            const rawQty = Number(row.quantity ?? 0);
+            const qty = Math.abs(rawQty);
+
+            let agg = map.get(key);
+            if (!agg) {
+              agg = { warehouseId, productId, moves: {} };
+              map.set(key, agg);
+            }
+            agg.moves[mv] = (agg.moves[mv] ?? 0) + qty;
+            totals[mv] = (totals[mv] ?? 0) + qty;
+          }
+
+          if (!data || data.length < pageSize) break;
+          offset += pageSize;
+          if (offset > 500000) break; // safety cap
+        }
       }
     }
 

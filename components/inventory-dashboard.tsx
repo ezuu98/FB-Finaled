@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import ProductWiseDetailsPageClient from "@/components/productwise-details-page"
 import { SkuDetailView } from "./sku-detail-view"
 import { useInventory } from "@/hooks/use-inventory"
 import { useAuth } from "@/hooks/use-auth"
@@ -51,6 +52,7 @@ export function InventoryDashboard() {
   const [lastSyncTimestamp, setLastSyncTimestamp] = useState<string | null>(null);
   const [lastSyncLoading, setLastSyncLoading] = useState(true);
   const [syncSince, setSyncSince] = useState<string>("");
+  const [showDetails, setShowDetails] = useState(false);
 
   const itemsPerPage = 30
 
@@ -443,9 +445,9 @@ export function InventoryDashboard() {
                 <Dialog open={showOdooSync} onOpenChange={setShowOdooSync}>
                   <DialogTrigger asChild>
                     {/* <Button variant="outline">
-                      <Database className="w-4 h-4 mr-2" />
-                      Connect Odoo
-                    </Button> */}
+                <Database className="w-4 h-4 mr-2" />
+                Connect Odoo
+              </Button> */}
                   </DialogTrigger>
                   <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
@@ -455,10 +457,7 @@ export function InventoryDashboard() {
                     <OdooSyncPanel />
                   </DialogContent>
                 </Dialog>
-                {/* <AddProductModal onProductAdded={refetch} /> */}
               </div>
-
-              {/* Last Sync Timestamp */}
               <div className="text-sm text-gray-500">
                 {lastSyncLoading ? (
                   <span className="flex items-center">
@@ -522,201 +521,206 @@ export function InventoryDashboard() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium"></CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  <a href="/productwisedetails" className="text-blue-600 hover:underline">
+                  <button onClick={() => setShowDetails(true)} className="text-blue-600 hover:underline">
                     Detailed Report
-                  </a>
+                  </button>
                 </div>
               </CardContent>
             </Card>
           </div>
-          {/* Search and Filters */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="flex flex-col space-y-4">
-              {/* Search Bar with Export Button and Date Dropdowns */}
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="by SKU Product Name or Barcode"
-                    value={searchTerm}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSearchTerm(value);
-                      if (value.trim()) {
-                        debouncedSearch(value);
-                      } else {
-                        setPage(1);
-                        searchInventory("");
-                      }
-                    }}
-                    className="pl-10 bg-gray-50 border-gray-200"
-                  />
-                </div>
-                <div className="flex items-center gap-2 md:gap-4">
-                  {/* Stock Corrections Upload */}
-                  <StockCorrectionsUpload />
 
-                  {/* Export Button */}
-                  <ExportInventory
-                    filteredData={paginatedData}
-                    searchTerm={searchTerm}
-                    category={selectedCategories.length ? selectedCategories.join(", ") : "All Categories"}
-                    stockStatus={stockStatus}
-                  />
-                </div>
+          {/* Conditional Rendering: Show Detailed Report or Table */}
+          {showDetails ? (
+            <div className="mt-6">
+              <div className="mb-2 flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowDetails(false)}>Hide Details</Button>
               </div>
-
-              <div className="flex justify-between items-center flex-wrap gap-4">
-                {/* Left Filters */}
-                <div className="flex space-x-4">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-80 justify-between">
-                        <span className="truncate text-left">
-                          {selectedCategories.length === 0
-                            ? "All Categories"
-                            : selectedCategories.length <= 2
-                              ? selectedCategories.join(", ")
-                              : `${selectedCategories.slice(0, 2).join(", ")} +${selectedCategories.length - 2} more`}
-                        </span>
-                        <ChevronDown className="w-4 h-4 opacity-50 flex-shrink-0 ml-2" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-80 max-h-[400px] overflow-auto">
-                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                        <Checkbox
-                          checked={selectedCategories.length === 0}
-                          onCheckedChange={() => setSelectedCategories([])}
-                        />
-                        <span className="ml-2">All Categories</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {availableCategories.map((cat) => {
-                        const checked = selectedCategories.includes(cat)
-                        return (
-                          <DropdownMenuItem key={cat} onSelect={(e) => e.preventDefault()}>
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={(isChecked) => {
-                                if (isChecked) {
-                                  setSelectedCategories((prev) => Array.from(new Set([...prev, cat])))
-                                } else {
-                                  setSelectedCategories((prev) => prev.filter((c) => c !== cat))
-                                }
-                              }}
-                            />
-                            <span className="ml-2 break-words">{cat}</span>
-                          </DropdownMenuItem>
-                        )
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  <Select value={stockStatus} onValueChange={setStockStatus}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Stock Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All Status">All Status</SelectItem>
-                      <SelectItem value="in-stock">In Stock</SelectItem>
-                      <SelectItem value="low-stock">Low Stock</SelectItem>
-                      <SelectItem value="out-of-stock">Out of Stock</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <ProductWiseDetailsPageClient />
             </div>
-          </div>
-
-          {/* Inventory Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="font-medium text-gray-700">Barcode</TableHead>
-                  <TableHead className="font-medium text-gray-700">Product</TableHead>
-                  <TableHead className="font-medium text-gray-700">Category</TableHead>
-                  <TableHead className="font-medium text-gray-700 text-center">Status</TableHead>
-                  <TableHead className="font-medium text-gray-700 text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedData.map((item, index) => (
-                  <TableRow key={index} className="hover:bg-gray-50">
-                    <TableCell className="font-mono text-sm text-blue-600">{item.barcode}</TableCell>
-                    <TableCell className="font-medium">
-                      <button
-                        onClick={() => handleSkuClick(item.originalData)}
-                        className="text-blue-600 hover:text-blue-800 hover:underline text-left"
-                      >
-                        {item.product}
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {item.category}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {item.totalStock === 0 ? (
-                        <Badge variant="destructive">Out of Stock</Badge>
-                      ) : item.isLowStock ? (
-                        <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-                          Low Stock
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-green-100 text-green-800">
-                          In Stock
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <EditProductModal
-                        product={item.originalData as unknown as any}
-                        onProductUpdated={refetch}
-                        trigger={
-                          <Button variant="outline" size="sm">
-                            <Edit className="w-3 h-3 mr-1" />
-                            Edit
-                          </Button>
-                        }
+          ) : (
+            <>
+              {/* Search and Filters */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="flex flex-col space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="by SKU Product Name or Barcode"
+                        value={searchTerm}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setSearchTerm(value);
+                          if (value.trim()) {
+                            debouncedSearch(value);
+                          } else {
+                            setPage(1);
+                            searchInventory("");
+                          }
+                        }}
+                        className="pl-10 bg-gray-50 border-gray-200"
                       />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="flex justify-between items-center py-4 px-6">
-              <div className="text-sm text-gray-600">
-                Showing {(page - 1) * itemsPerPage + 1} to {Math.min(page * itemsPerPage, actualTotalItems)} of {actualTotalItems} entries
+                    </div>
+                    <div className="flex items-center gap-2 md:gap-4">
+                      <StockCorrectionsUpload />
+                      <ExportInventory
+                        filteredData={paginatedData}
+                        searchTerm={searchTerm}
+                        category={selectedCategories.length ? selectedCategories.join(", ") : "All Categories"}
+                        stockStatus={stockStatus}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center flex-wrap gap-4">
+                    <div className="flex space-x-4">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="w-80 justify-between">
+                            <span className="truncate text-left">
+                              {selectedCategories.length === 0
+                                ? "All Categories"
+                                : selectedCategories.length <= 2
+                                  ? selectedCategories.join(", ")
+                                  : `${selectedCategories.slice(0, 2).join(", ")} +${selectedCategories.length - 2} more`}
+                            </span>
+                            <ChevronDown className="w-4 h-4 opacity-50 flex-shrink-0 ml-2" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-80 max-h-[400px] overflow-auto">
+                          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                            <Checkbox
+                              checked={selectedCategories.length === 0}
+                              onCheckedChange={() => setSelectedCategories([])}
+                            />
+                            <span className="ml-2">All Categories</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {availableCategories.map((cat) => {
+                            const checked = selectedCategories.includes(cat)
+                            return (
+                              <DropdownMenuItem key={cat} onSelect={(e) => e.preventDefault()}>
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(isChecked) => {
+                                    if (isChecked) {
+                                      setSelectedCategories((prev) => Array.from(new Set([...prev, cat])))
+                                    } else {
+                                      setSelectedCategories((prev) => prev.filter((c) => c !== cat))
+                                    }
+                                  }}
+                                />
+                                <span className="ml-2 break-words">{cat}</span>
+                              </DropdownMenuItem>
+                            )
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Select value={stockStatus} onValueChange={setStockStatus}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder="Stock Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All Status">All Status</SelectItem>
+                          <SelectItem value="in-stock">In Stock</SelectItem>
+                          <SelectItem value="low-stock">Low Stock</SelectItem>
+                          <SelectItem value="out-of-stock">Out of Stock</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === 1}
-                  onClick={handlePreviousPage}
-                >
-                  Previous
-                </Button>
-                <span className="flex items-center px-3 py-1 text-sm text-gray-600">
-                  Page {page} of {Math.ceil(actualTotalItems / itemsPerPage)}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= Math.ceil(actualTotalItems / itemsPerPage)}
-                  onClick={handleNextPage}
-                >
-                  Next
-                </Button>
+
+              {/* Inventory Table */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="font-medium text-gray-700">Barcode</TableHead>
+                      <TableHead className="font-medium text-gray-700">Product</TableHead>
+                      <TableHead className="font-medium text-gray-700">Category</TableHead>
+                      <TableHead className="font-medium text-gray-700 text-center">Status</TableHead>
+                      <TableHead className="font-medium text-gray-700 text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedData.map((item, index) => (
+                      <TableRow key={index} className="hover:bg-gray-50">
+                        <TableCell className="font-mono text-sm text-blue-600">{item.barcode}</TableCell>
+                        <TableCell className="font-medium">
+                          <button
+                            onClick={() => handleSkuClick(item.originalData)}
+                            className="text-blue-600 hover:text-blue-800 hover:underline text-left"
+                          >
+                            {item.product}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {item.category}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {item.totalStock === 0 ? (
+                            <Badge variant="destructive">Out of Stock</Badge>
+                          ) : item.isLowStock ? (
+                            <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                              Low Stock
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                              In Stock
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <EditProductModal
+                            product={item.originalData as unknown as any}
+                            onProductUpdated={refetch}
+                            trigger={
+                              <Button variant="outline" size="sm">
+                                <Edit className="w-3 h-3 mr-1" />
+                                Edit
+                              </Button>
+                            }
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="flex justify-between items-center py-4 px-6">
+                  <div className="text-sm text-gray-600">
+                    Showing {(page - 1) * itemsPerPage + 1} to {Math.min(page * itemsPerPage, actualTotalItems)} of {actualTotalItems} entries
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page === 1}
+                      onClick={handlePreviousPage}
+                    >
+                      Previous
+                    </Button>
+                    <span className="flex items-center px-3 py-1 text-sm text-gray-600">
+                      Page {page} of {Math.ceil(actualTotalItems / itemsPerPage)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= Math.ceil(actualTotalItems / itemsPerPage)}
+                      onClick={handleNextPage}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </main>
     </div>
