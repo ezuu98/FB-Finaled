@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase-client";
 
 type Item = { id: string; label: string; code?: string | null; category?: string | null };
 
@@ -28,10 +29,19 @@ function ChipMultiSelect({
 }) {
   const [open, setOpen] = useState(false);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const selectedOptions = useMemo(
-    () => selected.map((v) => options.find((o) => o.value === v)).filter(Boolean) as Option[],
-    [selected, options]
-  );
+  const selectedCount = selected.length;
+  const selectedPreview = useMemo(() => {
+    if (selected.length === 0) return [] as Option[];
+    const set = new Set(selected);
+    const preview: Option[] = [];
+    for (const opt of options) {
+      if (set.has(opt.value)) {
+        preview.push(opt);
+        if (preview.length >= 20) break;
+      }
+    }
+    return preview;
+  }, [selected, options]);
   const allSelected = options.length > 0 && selectedSet.size === options.length;
   const someSelected = selectedSet.size > 0 && selectedSet.size < options.length;
 
@@ -71,10 +81,12 @@ function ChipMultiSelect({
         onClick={() => setOpen((o) => !o)}
         className="mt-2 flex w-full min-h-[42px] flex-wrap items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
       >
-        {selectedOptions.length === 0 ? (
+        {selectedCount === 0 ? (
           <span className="text-sm text-gray-500">Select...</span>
+        ) : selectedCount > 50 ? (
+          <span className="text-sm text-gray-700">{selectedCount} selected</span>
         ) : (
-          selectedOptions.map((opt) => (
+          selectedPreview.map((opt) => (
             <span
               key={opt.value}
               className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-800"
@@ -247,11 +259,59 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const namePoolIds = new Set(namePool.map((i) => i.id));
   const codePoolIds = new Set(codePool.map((i) => i.id));
 
+  const unionIds = useMemo(() => {
+    const s = new Set<string>();
+    namePool.forEach((i) => s.add(i.id));
+    codePool.forEach((i) => s.add(i.id));
+    return s;
+  }, [namePool, codePool]);
+
+  const NAME_VALUE_LIMIT = 500;
+  const nameSelectValue = useMemo(() => {
+    const arr = selected.filter((id) => namePoolIds.has(id));
+    return arr.length > NAME_VALUE_LIMIT ? [] : arr;
+  }, [selected, namePoolIds]);
+
+  const CODE_VALUE_LIMIT = 500;
+  const codeSelectValue = useMemo(() => {
+    const arr = selected.filter((id) => codePoolIds.has(id));
+    return arr.length > CODE_VALUE_LIMIT ? [] : arr;
+  }, [selected, codePoolIds]);
+
+  const allUnionSelected = useMemo(() => {
+    if (unionIds.size === 0) return false;
+    for (const id of unionIds) if (!selectedSet.has(id)) return false;
+    return true;
+  }, [unionIds, selectedSet]);
+
+  const toggleUnionSelection = () => {
+    if (unionIds.size === 0) return;
+    if (allUnionSelected) {
+      const next = selected.filter((id) => !unionIds.has(id));
+      setSelected(next);
+    } else {
+      const nextSet = new Set(selected);
+      for (const id of unionIds) nextSet.add(id);
+      setSelected(Array.from(nextSet));
+    }
+  };
+
   const showNameDropdown = true;
   const showCodeDropdown = true;
 
   return (
     <div className="w-full">
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={toggleUnionSelection}
+          disabled={unionIds.size === 0}
+          className="inline-flex items-center rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+        >
+          {allUnionSelected ? "Deselect all" : "Select all"}
+        </button>
+      </div>
       <div className="grid gap-6 sm:grid-cols-2">
         <div
           onFocus={() => setIsNameOpen(true)}
@@ -273,25 +333,13 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
           />
           {showNameDropdown ? (
             <>
-              <div className="mt-2 flex justify-end">
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() =>
-                    setSelected((prev) => Array.from(new Set([...prev, ...namePool.map((i) => i.id)])))
-                  }
-                  disabled={namePool.length === 0 || namePool.every((i) => selectedSet.has(i.id))}
-                  className="inline-flex items-center rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                >
-                  Select all
-                </button>
-              </div>
+
               <select
                 aria-label="Results by name"
                 multiple
                 size={nameSize}
                 className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
-                value={selected.filter((id) => namePoolIds.has(id))}
+                value={nameSelectValue}
                 onChange={onNameChange}
               >
                 {namePool.map((it) => {
@@ -326,25 +374,13 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
           />
           {showCodeDropdown ? (
             <>
-              <div className="mt-2 flex justify-end">
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() =>
-                    setSelected((prev) => Array.from(new Set([...prev, ...codePool.map((i) => i.id)])))
-                  }
-                  disabled={codePool.length === 0 || codePool.every((i) => selectedSet.has(i.id))}
-                  className="inline-flex items-center rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                >
-                  Select all
-                </button>
-              </div>
+
               <select
                 aria-label="Results by barcode"
                 multiple
                 size={codeSize}
                 className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
-                value={selected.filter((id) => codePoolIds.has(id))}
+                value={codeSelectValue}
                 onChange={onCodeChange}
               >
                 {codePool.map((it) => {
@@ -414,20 +450,36 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
               if (selected.length === 0) throw new Error("Select at least one product");
               if (selectedWarehouses.length === 0) throw new Error("Select at least one warehouse");
               if (selectedMovements.length === 0) throw new Error("Select at least one movement type");
-              const res = await fetch("/api/report", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  productIds: selected.map((v) => (Number(v) || v)),
-                  warehouseIds: selectedWarehouses.map((v) => (Number(v) || v)),
-                  movements: selectedMovements,
-                  fromDate: fromDate || null,
-                  toDate: toDate || null,
-                }),
+
+              const pids = selected.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+              const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+              const fromTs = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : null;
+              const toTs = toDate ? (() => { const d = new Date(`${toDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString(); })() : null;
+
+              const { data, error } = await supabase.rpc("get_product_movement_report", {
+                product_ids: pids,
+                warehouse_ids: wids,
+                movements: selectedMovements,
+                from_ts: fromTs,
+                to_ts: toTs,
               });
-              const json = await res.json();
-              if (!res.ok) throw new Error(json.error || "Failed to create report");
-              setReport({ rows: json.rows || [], totals: json.totals || {} });
+              if (error) throw error;
+
+              const rows = (data || []).map((r: any) => ({
+                warehouseId: String(r.warehouse_id),
+                productId: String(r.product_id),
+                moves: r.moves || {},
+              }));
+
+              const totals: Record<string, number> = {};
+              for (const r of rows) {
+                for (const [k, v] of Object.entries(r.moves)) {
+                  const num = Number(v || 0);
+                  if (Number.isFinite(num)) totals[k] = (totals[k] || 0) + num;
+                }
+              }
+
+              setReport({ rows, totals });
             } catch (e: any) {
               setError(e?.message || "Something went wrong");
             } finally {
@@ -449,20 +501,37 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
             try {
               if (selected.length === 0) throw new Error("Select at least one product");
               if (selectedWarehouses.length === 0) throw new Error("Select at least one warehouse");
-              const res = await fetch("/api/report/as-of", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  productIds: selected.map((v) => (Number(v) || v)),
-                  warehouseIds: selectedWarehouses.map((v) => (Number(v) || v)),
-                  movements: MOVEMENT_ORDER,
-                  fromDate: fromDate || null,
-                  toDate: toDate || null,
-                }),
+
+              const pids = selected.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+              const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+
+              const { data, error } = await supabase.rpc("get_product_as_of_report", {
+                product_ids: pids,
+                warehouse_ids: wids,
+                from_date: '2025-07-01',
+                to_date: toDate || null,
               });
-              const json = await res.json();
-              if (!res.ok) throw new Error(json.error || "Failed to create as-of report");
-              setAsOfReport({ rows: json.rows || [], totals: json.totals || {} });
+              if (error) throw error;
+
+              const rows = (data || []).map((r: any) => ({
+                warehouseId: String(r.warehouse_id),
+                productId: String(r.product_id),
+                opening: Number(r.opening || 0),
+                adjustments: Number(r.adjustments || 0),
+                moves: r.moves || {},
+              }));
+
+              const totals: Record<string, number> = { opening: 0, adjustments: 0 };
+              for (const r of rows) {
+                totals.opening += Number(r.opening || 0);
+                totals.adjustments += Number(r.adjustments || 0);
+                for (const [k, v] of Object.entries(r.moves)) {
+                  const num = Number(v || 0);
+                  if (Number.isFinite(num)) totals[k] = (totals[k] || 0) + num;
+                }
+              }
+
+              setAsOfReport({ rows, totals });
             } catch (e: any) {
               setError(e?.message || "Something went wrong");
             } finally {
