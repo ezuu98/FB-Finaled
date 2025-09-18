@@ -158,6 +158,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const [qName, setQName] = useState("");
   const [qCode, setQCode] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
   const [isNameOpen, setIsNameOpen] = useState(false);
   const [isCodeOpen, setIsCodeOpen] = useState(false);
   const [selectedWarehouses, setSelectedWarehouses] = useState<string[]>([]);
@@ -250,14 +251,8 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     setSelected((prev) => Array.from(new Set([...prev, ...ids])));
   };
 
+  const baseSelectedSet = useMemo(() => new Set(selected), [selected]);
 
-  const selectedItems = selected
-    .map((id) => items.find((i) => i.id === id))
-    .filter(Boolean) as Item[];
-  const selectedSet = useMemo(() => new Set(selected), [selected]);
-
-  const namePoolIds = new Set(namePool.map((i) => i.id));
-  const codePoolIds = new Set(codePool.map((i) => i.id));
 
   const unionIds = useMemo(() => {
     const s = new Set<string>();
@@ -266,17 +261,36 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     return s;
   }, [namePool, codePool]);
 
+  const selectedSet = useMemo(() => {
+    if (!selectAll) return baseSelectedSet;
+    const s = new Set(baseSelectedSet);
+    unionIds.forEach((id) => s.add(id));
+    return s as Set<string>;
+  }, [baseSelectedSet, selectAll, unionIds]);
+
   const NAME_VALUE_LIMIT = 500;
   const nameSelectValue = useMemo(() => {
-    const arr = selected.filter((id) => namePoolIds.has(id));
-    return arr.length > NAME_VALUE_LIMIT ? [] : arr;
-  }, [selected, namePoolIds]);
+    const vals: string[] = [];
+    for (const it of namePool) {
+      if (selectedSet.has(it.id)) {
+        if (vals.length >= NAME_VALUE_LIMIT) return [] as string[];
+        vals.push(it.id);
+      }
+    }
+    return vals;
+  }, [namePool, selectedSet]);
 
   const CODE_VALUE_LIMIT = 500;
   const codeSelectValue = useMemo(() => {
-    const arr = selected.filter((id) => codePoolIds.has(id));
-    return arr.length > CODE_VALUE_LIMIT ? [] : arr;
-  }, [selected, codePoolIds]);
+    const vals: string[] = [];
+    for (const it of codePool) {
+      if (selectedSet.has(it.id)) {
+        if (vals.length >= CODE_VALUE_LIMIT) return [] as string[];
+        vals.push(it.id);
+      }
+    }
+    return vals;
+  }, [codePool, selectedSet]);
 
   const allUnionSelected = useMemo(() => {
     if (unionIds.size === 0) return false;
@@ -287,13 +301,119 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const toggleUnionSelection = () => {
     if (unionIds.size === 0) return;
     if (allUnionSelected) {
-      const next = selected.filter((id) => !unionIds.has(id));
-      setSelected(next);
+      setSelectAll(false);
+      setSelected((prev) => prev.filter((id) => !unionIds.has(id)));
     } else {
-      const nextSet = new Set(selected);
-      for (const id of unionIds) nextSet.add(id);
-      setSelected(Array.from(nextSet));
+      setSelectAll(true);
     }
+  };
+
+  const selectedItems = useMemo(() => items.filter((i) => selectedSet.has(i.id)), [items, selectedSet]);
+
+  const toNumericIds = (ids: Iterable<string>) => Array.from(ids).map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  const aggregateMovementRows = (rows: Array<{ warehouse_id: number | string; product_id: number | string; moves: Record<string, number> }>): ReportRow[] => {
+    const map = new Map<string, ReportRow>();
+    for (const r of rows) {
+      const wid = String(r.warehouse_id);
+      const pid = String(r.product_id);
+      const key = `${wid}:${pid}`;
+      const cur = map.get(key) || { warehouseId: wid, productId: pid, moves: {} };
+      for (const [k, v] of Object.entries(r.moves || {})) {
+        const num = Number(v || 0);
+        if (Number.isFinite(num)) cur.moves[k] = (cur.moves[k] || 0) + num;
+      }
+      map.set(key, cur);
+    }
+    return Array.from(map.values());
+  };
+
+  const aggregateAsOfRows = (rows: Array<{ warehouse_id: number | string; product_id: number | string; opening?: number; adjustments?: number; moves: Record<string, number> }>): AsOfRow[] => {
+    const map = new Map<string, AsOfRow>();
+    for (const r of rows) {
+      const wid = String(r.warehouse_id);
+      const pid = String(r.product_id);
+      const key = `${wid}:${pid}`;
+      const cur = map.get(key) || { warehouseId: wid, productId: pid, opening: 0, adjustments: 0, moves: {} };
+      cur.opening += Number(r.opening || 0);
+      cur.adjustments += Number(r.adjustments || 0);
+      for (const [k, v] of Object.entries(r.moves || {})) {
+        const num = Number(v || 0);
+        if (Number.isFinite(num)) cur.moves[k] = (cur.moves[k] || 0) + num;
+      }
+      map.set(key, cur);
+    }
+    return Array.from(map.values());
+  };
+
+  const fetchMovementBatched = async (
+    pids: number[],
+    wids: number[],
+    moves: string[],
+    fromTs: string | null,
+    toTs: string | null,
+  ) => {
+    const CHUNK_SIZE = 250;
+    const chunks = chunk(pids, CHUNK_SIZE);
+    const allRows: any[] = [];
+    for (const c of chunks) {
+      const { data, error } = await supabase.rpc("get_product_movement_report", {
+        product_ids: c,
+        warehouse_ids: wids,
+        movements: moves,
+        from_ts: fromTs,
+        to_ts: toTs,
+      });
+      if (error) throw error;
+      allRows.push(...(data || []));
+    }
+    const rows = aggregateMovementRows(allRows);
+    const totals: Record<string, number> = {};
+    for (const r of rows) {
+      for (const [k, v] of Object.entries(r.moves)) {
+        const num = Number(v || 0);
+        if (Number.isFinite(num)) totals[k] = (totals[k] || 0) + num;
+      }
+    }
+    return { rows, totals } as Report;
+  };
+
+  const fetchAsOfBatched = async (
+    pids: number[],
+    wids: number[],
+    fromDateStr: string | null,
+    toDateStr: string | null,
+  ) => {
+    const CHUNK_SIZE = 250;
+    const chunks = chunk(pids, CHUNK_SIZE);
+    const allRows: any[] = [];
+    for (const c of chunks) {
+      const { data, error } = await supabase.rpc("get_product_as_of_report", {
+        product_ids: c,
+        warehouse_ids: wids,
+        from_date: fromDateStr,
+        to_date: toDateStr,
+      });
+      if (error) throw error;
+      allRows.push(...(data || []));
+    }
+    const rows = aggregateAsOfRows(allRows);
+    const totals: Record<string, number> = { opening: 0, adjustments: 0 } as any;
+    for (const r of rows) {
+      totals.opening += Number((r as any).opening || 0);
+      totals.adjustments += Number((r as any).adjustments || 0);
+      for (const [k, v] of Object.entries((r as any).moves)) {
+        const num = Number(v || 0);
+        if (Number.isFinite(num)) totals[k] = (totals as any)[k] ? (totals as any)[k] + num : num;
+      }
+    }
+    return { rows, totals } as AsOfReport;
   };
 
   const showNameDropdown = true;
@@ -447,41 +567,21 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
             setReport(null);
             setAsOfReport(null);
             try {
-              if (selected.length === 0) throw new Error("Select at least one product");
+              if (selectedSet.size === 0) throw new Error("Select at least one product");
               if (selectedWarehouses.length === 0) throw new Error("Select at least one warehouse");
               if (selectedMovements.length === 0) throw new Error("Select at least one movement type");
 
-              const pids = selected.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+              const pids = toNumericIds(selectedSet);
               const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
               const fromTs = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : null;
               const toTs = toDate ? (() => { const d = new Date(`${toDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString(); })() : null;
 
-              const { data, error } = await supabase.rpc("get_product_movement_report", {
-                product_ids: pids,
-                warehouse_ids: wids,
-                movements: selectedMovements,
-                from_ts: fromTs,
-                to_ts: toTs,
-              });
-              if (error) throw error;
-
-              const rows = (data || []).map((r: any) => ({
-                warehouseId: String(r.warehouse_id),
-                productId: String(r.product_id),
-                moves: r.moves || {},
-              }));
-
-              const totals: Record<string, number> = {};
-              for (const r of rows) {
-                for (const [k, v] of Object.entries(r.moves)) {
-                  const num = Number(v || 0);
-                  if (Number.isFinite(num)) totals[k] = (totals[k] || 0) + num;
-                }
-              }
-
-              setReport({ rows, totals });
+              const rep = await fetchMovementBatched(pids, wids, selectedMovements, fromTs, toTs);
+              setReport(rep);
             } catch (e: any) {
-              setError(e?.message || "Something went wrong");
+              const msg = String(e?.message || e || "");
+              if (/statement timeout/i.test(msg)) setError("Query timed out. Try narrowing the date range or fewer products.");
+              else setError(msg || "Something went wrong");
             } finally {
               setLoading(false);
             }
@@ -499,41 +599,18 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
             setReport(null);
             setAsOfReport(null);
             try {
-              if (selected.length === 0) throw new Error("Select at least one product");
+              if (selectedSet.size === 0) throw new Error("Select at least one product");
               if (selectedWarehouses.length === 0) throw new Error("Select at least one warehouse");
 
-              const pids = selected.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+              const pids = toNumericIds(selectedSet);
               const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
 
-              const { data, error } = await supabase.rpc("get_product_as_of_report", {
-                product_ids: pids,
-                warehouse_ids: wids,
-                from_date: '2025-07-01',
-                to_date: toDate || null,
-              });
-              if (error) throw error;
-
-              const rows = (data || []).map((r: any) => ({
-                warehouseId: String(r.warehouse_id),
-                productId: String(r.product_id),
-                opening: Number(r.opening || 0),
-                adjustments: Number(r.adjustments || 0),
-                moves: r.moves || {},
-              }));
-
-              const totals: Record<string, number> = { opening: 0, adjustments: 0 };
-              for (const r of rows) {
-                totals.opening += Number(r.opening || 0);
-                totals.adjustments += Number(r.adjustments || 0);
-                for (const [k, v] of Object.entries(r.moves)) {
-                  const num = Number(v || 0);
-                  if (Number.isFinite(num)) totals[k] = (totals[k] || 0) + num;
-                }
-              }
-
-              setAsOfReport({ rows, totals });
+              const rep = await fetchAsOfBatched(pids, wids, '2025-07-01', toDate || null);
+              setAsOfReport(rep);
             } catch (e: any) {
-              setError(e?.message || "Something went wrong");
+              const msg = String(e?.message || e || "");
+              if (/statement timeout/i.test(msg)) setError("Query timed out. Try fewer products or a shorter range.");
+              else setError(msg || "Something went wrong");
             } finally {
               setLoading(false);
             }
