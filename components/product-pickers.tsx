@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 type Item = { id: string; label: string; code?: string | null; category?: string | null };
@@ -173,6 +173,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   type AsOfRow = { warehouseId: string; productId: string; opening: number; adjustments: number; moves: Record<string, number> };
   type AsOfReport = { rows: AsOfRow[]; totals: Record<string, number> } | null;
   const [asOfReport, setAsOfReport] = useState<AsOfReport>(null);
+  const [page, setPage] = useState(1);
   const fmt = (value: unknown) => {
     const n = Number(value);
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
@@ -309,6 +310,21 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   };
 
   const selectedItems = useMemo(() => items.filter((i) => selectedSet.has(i.id)), [items, selectedSet]);
+
+  const PAGE_SIZE = 20;
+  const totalReports = selectedItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalReports / PAGE_SIZE));
+  const canPaginate = totalReports > PAGE_SIZE;
+  const paginatedItems = useMemo(() => {
+    if (!canPaginate) return selectedItems;
+    const start = (page - 1) * PAGE_SIZE;
+    return selectedItems.slice(start, start + PAGE_SIZE);
+  }, [selectedItems, page, canPaginate]);
+
+  useEffect(() => {
+    // Reset to first page whenever the set of items or reports changes
+    setPage(1);
+  }, [totalReports, !!report, !!asOfReport]);
 
   const toNumericIds = (ids: Iterable<string>) => Array.from(ids).map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
 
@@ -731,7 +747,31 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
 
       {(report || asOfReport) && (
         <>
-          {selectedItems.map((prod) => {
+          {canPaginate && (
+            <div className="mt-6 flex items-center justify-between gap-3">
+              <div className="text-sm text-gray-600">Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, totalReports)} of {totalReports}</div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Prev
+                </button>
+                <span className="text-sm text-gray-700">Page {page} / {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+          {paginatedItems.map((prod) => {
             const pid = String(prod.id);
             const rowsForProductStd = report ? (report.rows || []).filter((r) => String(r.productId) === pid) : [];
             const rowsForProductAsOf = asOfReport ? (asOfReport.rows || []).filter((r) => String(r.productId) === pid) : [];
@@ -844,6 +884,30 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
               </div>
             );
           })}
+          {canPaginate && (
+            <div className="mt-6 flex items-center justify-between gap-3">
+              <div className="text-sm text-gray-600">Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, totalReports)} of {totalReports}</div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Prev
+                </button>
+                <span className="text-sm text-gray-700">Page {page} / {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
