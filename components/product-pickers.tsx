@@ -249,11 +249,10 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
         }
       } catch {}
       try {
-        const { data } = await supabase.from('categories').select('display_name, name, active, is_active');
+        const { data } = await supabase.from('categories').select('display_name, complete_name, name');
         if (!cancelled && Array.isArray(data)) {
           const list = data
-            .filter((r: any) => r && (r.active === true || r.is_active === true || (r.active == null && r.is_active == null)))
-            .map((r: any) => String(r.display_name || r.name || ''))
+            .map((r: any) => String(r.display_name || r.complete_name || r.name || ''))
             .filter((v: string) => v.trim().length > 0);
           const uniq = Array.from(new Set(list));
           setAllCategories(uniq);
