@@ -110,7 +110,7 @@ export default function ProductWiseDetailsPageClient() {
             id: uniqueId,
             label: label,
             code: code,
-            category: p.complete_name ?? null,
+            category: p.display_name ?? null,
           };
         });
 

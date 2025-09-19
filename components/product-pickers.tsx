@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
 
@@ -155,16 +153,15 @@ function ChipMultiSelect({
 }
 
 export default function ProductPickers({ items, warehouses = [] }: Props) {
-  const [qName, setQName] = useState("");
-  const [qCode, setQCode] = useState("");
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [isNameOpen, setIsNameOpen] = useState(false);
-  const [isCodeOpen, setIsCodeOpen] = useState(false);
   const [selectedWarehouses, setSelectedWarehouses] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedMovements, setSelectedMovements] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   type ReportRow = { warehouseId: string; productId: string; moves: Record<string, number> };
@@ -225,42 +222,71 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     [warehouses]
   );
 
+  const categoryOptions: Option[] = useMemo(() => {
+    const base = allCategories.length
+      ? allCategories
+      : Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
+    return base
+      .slice()
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ value: name, label: name }));
+  }, [allCategories, items]);
+
   const norm = (s: string) => s.normalize("NFKD").toLowerCase();
 
-  const namePool = useMemo(() => {
-    const q = norm(qName.trim());
-    return q ? items.filter((i) => norm(i.label).startsWith(q)) : items;
-  }, [items, qName]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_all_categories');
+        if (!cancelled && !error && Array.isArray(data)) {
+          const list = (data as any[])
+            .map((row) => typeof row === 'string' ? row : (row?.name ?? row?.display_name ?? row?.label ?? ''))
+            .filter((v) => typeof v === 'string' && v.trim().length > 0);
+          const uniq = Array.from(new Set(list));
+          setAllCategories(uniq);
+          return;
+        }
+      } catch {}
+      try {
+        const { data } = await supabase.from('categories').select('display_name, complete_name, name');
+        if (!cancelled && Array.isArray(data)) {
+          const list = data
+            .map((r: any) => String(r.display_name || r.complete_name || r.name || ''))
+            .filter((v: string) => v.trim().length > 0);
+          const uniq = Array.from(new Set(list));
+          setAllCategories(uniq);
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const codePool = useMemo(() => {
-    const q = norm(qCode.trim());
-    return q
-      ? items.filter((i) => norm(i.code ?? "").startsWith(q))
-      : items.filter((i) => (i.code ?? "") !== "");
-  }, [items, qCode]);
+  const combinedPool = useMemo(() => {
+    const q = norm(query.trim());
+    const base = selectedCategories.length
+      ? items.filter((i) => !!i.category && selectedCategories.includes(String(i.category)))
+      : items;
+    if (!q) return base;
+    return base.filter((i) => norm(i.label).startsWith(q) || norm(i.code ?? "").startsWith(q));
+  }, [items, query, selectedCategories]);
 
-  const nameSize = useMemo(() => Math.min(10, Math.max(6, namePool.length)), [namePool.length]);
-  const codeSize = useMemo(() => Math.min(10, Math.max(6, codePool.length)), [codePool.length]);
+  const comboSize = useMemo(() => Math.min(10, Math.max(6, combinedPool.length)), [combinedPool.length]);
 
-  const onNameChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const ids = Array.from(e.currentTarget.selectedOptions).map((o) => o.value);
-    setSelected((prev) => Array.from(new Set([...prev, ...ids])));
-  };
-
-  const onCodeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const onComboChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const ids = Array.from(e.currentTarget.selectedOptions).map((o) => o.value);
     setSelected((prev) => Array.from(new Set([...prev, ...ids])));
   };
 
   const baseSelectedSet = useMemo(() => new Set(selected), [selected]);
 
-
   const unionIds = useMemo(() => {
     const s = new Set<string>();
-    namePool.forEach((i) => s.add(i.id));
-    codePool.forEach((i) => s.add(i.id));
+    combinedPool.forEach((i) => s.add(i.id));
     return s;
-  }, [namePool, codePool]);
+  }, [combinedPool]);
 
   const selectedSet = useMemo(() => {
     if (!selectAll) return baseSelectedSet;
@@ -269,29 +295,17 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     return s as Set<string>;
   }, [baseSelectedSet, selectAll, unionIds]);
 
-  const NAME_VALUE_LIMIT = 500;
-  const nameSelectValue = useMemo(() => {
+  const SELECT_VALUE_LIMIT = 500;
+  const comboSelectValue = useMemo(() => {
     const vals: string[] = [];
-    for (const it of namePool) {
+    for (const it of combinedPool) {
       if (selectedSet.has(it.id)) {
-        if (vals.length >= NAME_VALUE_LIMIT) return [] as string[];
+        if (vals.length >= SELECT_VALUE_LIMIT) return [] as string[];
         vals.push(it.id);
       }
     }
     return vals;
-  }, [namePool, selectedSet]);
-
-  const CODE_VALUE_LIMIT = 500;
-  const codeSelectValue = useMemo(() => {
-    const vals: string[] = [];
-    for (const it of codePool) {
-      if (selectedSet.has(it.id)) {
-        if (vals.length >= CODE_VALUE_LIMIT) return [] as string[];
-        vals.push(it.id);
-      }
-    }
-    return vals;
-  }, [codePool, selectedSet]);
+  }, [combinedPool, selectedSet]);
 
   const allUnionSelected = useMemo(() => {
     if (unionIds.size === 0) return false;
@@ -432,8 +446,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     return { rows, totals } as AsOfReport;
   };
 
-  const showNameDropdown = true;
-  const showCodeDropdown = true;
+  const showDropdown = true;
 
   return (
     <div className="w-full">
@@ -448,88 +461,50 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
           {allUnionSelected ? "Deselect all" : "Select all"}
         </button>
       </div>
-      <div className="grid gap-6 sm:grid-cols-2">
-        <div
-          onFocus={() => setIsNameOpen(true)}
-          onBlur={(e) => {
-            const rt = e.relatedTarget as Node | null;
-            if (!rt || !e.currentTarget.contains(rt)) setIsNameOpen(false);
-          }}
-        >
-          <label htmlFor="search-name" className="block text-sm font-medium text-gray-700">
-            Search by name
+
+      <div className="mt-4 grid gap-6 sm:grid-cols-[1fr_20rem]">
+        <div>
+          <label htmlFor="search-combo" className="block text-sm font-medium text-gray-700">
+            Search by name or barcode
           </label>
           <input
-            id="search-name"
+            id="search-combo"
             type="text"
-            value={qName}
-            onChange={(e) => setQName(e.target.value)}
-            placeholder="Type name..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Type name or barcode..."
             className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
           />
-          {showNameDropdown ? (
-            <>
-
-              <select
-                aria-label="Results by name"
-                multiple
-                size={nameSize}
-                className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
-                value={nameSelectValue}
-                onChange={onNameChange}
-              >
-                {namePool.map((it) => {
-                  const isSel = selectedSet.has(it.id);
-                  return (
-                    <option key={it.id} value={it.id}>
-                      {`${it.label}${isSel ? " ●" : ""}`}
-                    </option>
-                  );
-                })}
-              </select>
-            </>
-          ) : null}
         </div>
-        <div
-          onFocus={() => setIsCodeOpen(true)}
-          onBlur={(e) => {
-            const rt = e.relatedTarget as Node | null;
-            if (!rt || !e.currentTarget.contains(rt)) setIsCodeOpen(false);
-          }}
-        >
-          <label htmlFor="search-code" className="block text-sm font-medium text-gray-700">
-            Search by barcode
-          </label>
-          <input
-            id="search-code"
-            type="text"
-            value={qCode}
-            onChange={(e) => setQCode(e.target.value)}
-            placeholder="Type barcode..."
-            className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
+        <div>
+          <ChipMultiSelect
+            id="cat-multi"
+            label="Categories"
+            options={categoryOptions}
+            selected={selectedCategories}
+            onChange={setSelectedCategories}
           />
-          {showCodeDropdown ? (
-            <>
-
-              <select
-                aria-label="Results by barcode"
-                multiple
-                size={codeSize}
-                className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
-                value={codeSelectValue}
-                onChange={onCodeChange}
-              >
-                {codePool.map((it) => {
-                  const isSel = selectedSet.has(it.id);
-                  const label = `${it.code ? `${it.code} — ` : ""}${it.label}`;
-                  return (
-                    <option key={it.id} value={it.id}>
-                      {`${label}${isSel ? " ●" : ""}`}
-                    </option>
-                  );
-                })}
-              </select>
-            </>
+        </div>
+        <div className="sm:col-span-2">
+          {showDropdown ? (
+            <select
+              aria-label="Results"
+              multiple
+              size={comboSize}
+              className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
+              value={comboSelectValue}
+              onChange={onComboChange}
+            >
+              {combinedPool.map((it) => {
+                const isSel = selectedSet.has(it.id);
+                const label = `${it.label}${it.code ? ` — ${it.code}` : ""}`;
+                return (
+                  <option key={it.id} value={it.id}>
+                    {`${label}${isSel ? " ●" : ""}`}
+                  </option>
+                );
+              })}
+            </select>
           ) : null}
         </div>
       </div>
