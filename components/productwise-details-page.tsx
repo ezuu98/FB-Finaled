@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type Warehouse = { id: number; display_name: string };
 
-type Item = { id: string; label: string; code?: string | null; category?: string | null };
+type Item = { id: string; label: string; code?: string | null; category?: string | null; category_id?: number | string | null };
 
 function productLabel(row: Record<string, any>) {
   return row.name ?? String(row.id ?? "Unknown");
@@ -111,6 +111,7 @@ export default function ProductWiseDetailsPageClient() {
             label: label,
             code: code,
             category: p.display_name ?? null,
+            category_id: (p.category_id ?? p.categ_id ?? null),
           };
         });
 

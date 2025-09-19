@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
 
-type Item = { id: string; label: string; code?: string | null; category?: string | null };
+type Item = { id: string; label: string; code?: string | null; category?: string | null; category_id?: number | string | null };
 
 type Warehouse = { id: number; display_name: string };
 
@@ -64,7 +64,6 @@ function ChipMultiSelect({
   return (
     <div
       className="relative"
-      onFocus={() => setOpen(true)}
       onBlur={(e) => {
         const rt = e.relatedTarget as Node | null;
         if (!rt || !e.currentTarget.contains(rt)) setOpen(false);
@@ -158,10 +157,16 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const [selectAll, setSelectAll] = useState(false);
   const [selectedWarehouses, setSelectedWarehouses] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [toDate, setToDate] = useState(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  });
   const [selectedMovements, setSelectedMovements] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [allCategories, setAllCategories] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   type ReportRow = { warehouseId: string; productId: string; moves: Record<string, number> };
@@ -225,11 +230,21 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const categoryOptions: Option[] = useMemo(() => {
     const base = allCategories.length
       ? allCategories
-      : Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
+      : Array.from(
+          new Map(
+            items
+              .map((i) => {
+                const id = i.category_id != null ? String(i.category_id) : (i.category ? String(i.category) : "");
+                const name = i.category ? String(i.category) : id;
+                return id ? [id, { id, name }] as const : null;
+              })
+              .filter(Boolean) as Array<readonly [string, { id: string; name: string }]>
+          ).values()
+        );
     return base
       .slice()
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => ({ value: name, label: name }));
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => ({ value: c.id, label: c.name }));
   }, [allCategories, items]);
 
   const norm = (s: string) => s.normalize("NFKD").toLowerCase();
@@ -241,21 +256,32 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
         const { data, error } = await supabase.rpc('get_all_categories');
         if (!cancelled && !error && Array.isArray(data)) {
           const list = (data as any[])
-            .map((row) => typeof row === 'string' ? row : (row?.name ?? row?.display_name ?? row?.label ?? ''))
-            .filter((v) => typeof v === 'string' && v.trim().length > 0);
-          const uniq = Array.from(new Set(list));
-          setAllCategories(uniq);
+            .map((row) => {
+              if (typeof row === 'string') return null;
+              const id = row?.categ_id ?? row?.id ?? null;
+              const name = row?.display_name ?? row?.name ?? row?.label ?? null;
+              if (id == null || name == null) return null;
+              return { id: String(id), name: String(name) };
+            })
+            .filter(Boolean) as Array<{ id: string; name: string }>;
+          const map = new Map(list.map((c) => [c.id, c]));
+          setAllCategories(Array.from(map.values()));
           return;
         }
       } catch {}
       try {
-        const { data } = await supabase.from('categories').select('display_name, complete_name, name');
+        const { data } = await supabase.from('categories').select('display_name, complete_name, name, categ_id');
         if (!cancelled && Array.isArray(data)) {
-          const list = data
-            .map((r: any) => String(r.display_name || r.complete_name || r.name || ''))
-            .filter((v: string) => v.trim().length > 0);
-          const uniq = Array.from(new Set(list));
-          setAllCategories(uniq);
+          const list = (data as any[])
+            .map((r: any) => {
+              const id = r.categ_id ?? r.id ?? null;
+              const name = r.display_name || r.complete_name || r.name || r.categ_id;
+              if (id == null || !name) return null;
+              return { id: String(id), name: String(name) };
+            })
+            .filter(Boolean) as Array<{ id: string; name: string }>;
+          const map = new Map(list.map((c) => [c.id, c]));
+          setAllCategories(Array.from(map.values()));
         }
       } catch {}
     })();
@@ -267,11 +293,23 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const combinedPool = useMemo(() => {
     const q = norm(query.trim());
     const base = selectedCategories.length
-      ? items.filter((i) => !!i.category && selectedCategories.includes(String(i.category)))
+      ? items.filter((i) => {
+          const id = i.category_id != null ? String(i.category_id) : (i.category ? String(i.category) : "");
+          return !!id && selectedCategories.includes(id);
+        })
       : items;
     if (!q) return base;
     return base.filter((i) => norm(i.label).startsWith(q) || norm(i.code ?? "").startsWith(q));
   }, [items, query, selectedCategories]);
+
+  // When categories are selected, automatically select all matching products
+  useEffect(() => {
+    if (selectedCategories.length > 0) {
+      setSelectAll(true);
+    } else {
+      setSelectAll(false);
+    }
+  }, [selectedCategories]);
 
   const comboSize = useMemo(() => Math.min(10, Math.max(6, combinedPool.length)), [combinedPool.length]);
 
