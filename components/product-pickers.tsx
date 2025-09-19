@@ -462,8 +462,8 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
         </button>
       </div>
 
-      <div className="mt-4 flex flex-col gap-6 sm:flex-row">
-        <div className="sm:flex-1">
+      <div className="mt-4 grid gap-6 sm:grid-cols-[1fr_20rem]">
+        <div>
           <label htmlFor="search-combo" className="block text-sm font-medium text-gray-700">
             Search by name or barcode
           </label>
@@ -475,6 +475,17 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
             placeholder="Type name or barcode..."
             className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
           />
+        </div>
+        <div>
+          <ChipMultiSelect
+            id="cat-multi"
+            label="Categories"
+            options={categoryOptions}
+            selected={selectedCategories}
+            onChange={setSelectedCategories}
+          />
+        </div>
+        <div className="sm:col-span-2">
           {showDropdown ? (
             <select
               aria-label="Results"
@@ -495,15 +506,6 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
               })}
             </select>
           ) : null}
-        </div>
-        <div className="sm:w-80">
-          <ChipMultiSelect
-            id="cat-multi"
-            label="Categories"
-            options={categoryOptions}
-            selected={selectedCategories}
-            onChange={setSelectedCategories}
-          />
         </div>
       </div>
 
