@@ -462,38 +462,49 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
         </button>
       </div>
 
-      <div>
-        <label htmlFor="search-combo" className="block text-sm font-medium text-gray-700">
-          Search by name or barcode
-        </label>
-        <input
-          id="search-combo"
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Type name or barcode..."
-          className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
-        />
-        {showDropdown ? (
-          <select
-            aria-label="Results"
-            multiple
-            size={comboSize}
+      <div className="mt-4 flex flex-col gap-6 sm:flex-row">
+        <div className="sm:flex-1">
+          <label htmlFor="search-combo" className="block text-sm font-medium text-gray-700">
+            Search by name or barcode
+          </label>
+          <input
+            id="search-combo"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Type name or barcode..."
             className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
-            value={comboSelectValue}
-            onChange={onComboChange}
-          >
-            {combinedPool.map((it) => {
-              const isSel = selectedSet.has(it.id);
-              const label = `${it.code ? `${it.code} — ` : ""}${it.label}`;
-              return (
-                <option key={it.id} value={it.id}>
-                  {`${label}${isSel ? " ●" : ""}`}
-                </option>
-              );
-            })}
-          </select>
-        ) : null}
+          />
+          {showDropdown ? (
+            <select
+              aria-label="Results"
+              multiple
+              size={comboSize}
+              className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
+              value={comboSelectValue}
+              onChange={onComboChange}
+            >
+              {combinedPool.map((it) => {
+                const isSel = selectedSet.has(it.id);
+                const label = `${it.code ? `${it.code} — ` : ""}${it.label}`;
+                return (
+                  <option key={it.id} value={it.id}>
+                    {`${label}${isSel ? " ●" : ""}`}
+                  </option>
+                );
+              })}
+            </select>
+          ) : null}
+        </div>
+        <div className="sm:w-80">
+          <ChipMultiSelect
+            id="cat-multi"
+            label="Categories"
+            options={categoryOptions}
+            selected={selectedCategories}
+            onChange={setSelectedCategories}
+          />
+        </div>
       </div>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-4">
