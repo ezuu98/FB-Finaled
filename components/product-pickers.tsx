@@ -498,13 +498,6 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
 
       <div className="mt-6 grid gap-6 sm:grid-cols-4">
         <ChipMultiSelect
-          id="cat-multi"
-          label="Categories"
-          options={categoryOptions}
-          selected={selectedCategories}
-          onChange={setSelectedCategories}
-        />
-        <ChipMultiSelect
           id="wh-multi"
           label="Warehouses"
           options={warehouseOptions}
