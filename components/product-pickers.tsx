@@ -497,7 +497,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
             >
               {combinedPool.map((it) => {
                 const isSel = selectedSet.has(it.id);
-                const label = `${it.code ? `${it.code} — ` : ""}${it.label}`;
+                const label = `${it.label}${it.code ? ` — ${it.code}` : ""}`;
                 return (
                   <option key={it.id} value={it.id}>
                     {`${label}${isSel ? " ●" : ""}`}
