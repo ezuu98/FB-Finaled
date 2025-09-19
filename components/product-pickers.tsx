@@ -160,6 +160,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedMovements, setSelectedMovements] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   type ReportRow = { warehouseId: string; productId: string; moves: Record<string, number> };
@@ -220,13 +221,26 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     [warehouses]
   );
 
+  const categoryOptions: Option[] = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of items) {
+      if (i.category) set.add(String(i.category));
+    }
+    return Array.from(set)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ value: name, label: name }));
+  }, [items]);
+
   const norm = (s: string) => s.normalize("NFKD").toLowerCase();
 
   const combinedPool = useMemo(() => {
     const q = norm(query.trim());
-    if (!q) return items;
-    return items.filter((i) => norm(i.label).startsWith(q) || norm(i.code ?? "").startsWith(q));
-  }, [items, query]);
+    const base = selectedCategories.length
+      ? items.filter((i) => !!i.category && selectedCategories.includes(String(i.category)))
+      : items;
+    if (!q) return base;
+    return base.filter((i) => norm(i.label).startsWith(q) || norm(i.code ?? "").startsWith(q));
+  }, [items, query, selectedCategories]);
 
   const comboSize = useMemo(() => Math.min(10, Math.max(6, combinedPool.length)), [combinedPool.length]);
 
@@ -452,6 +466,13 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
       </div>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-4">
+        <ChipMultiSelect
+          id="cat-multi"
+          label="Categories"
+          options={categoryOptions}
+          selected={selectedCategories}
+          onChange={setSelectedCategories}
+        />
         <ChipMultiSelect
           id="wh-multi"
           label="Warehouses"
