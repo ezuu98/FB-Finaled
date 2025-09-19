@@ -161,6 +161,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const [toDate, setToDate] = useState("");
   const [selectedMovements, setSelectedMovements] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   type ReportRow = { warehouseId: string; productId: string; moves: Record<string, number> };
@@ -222,16 +223,47 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   );
 
   const categoryOptions: Option[] = useMemo(() => {
-    const set = new Set<string>();
-    for (const i of items) {
-      if (i.category) set.add(String(i.category));
-    }
-    return Array.from(set)
+    const base = allCategories.length
+      ? allCategories
+      : Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
+    return base
+      .slice()
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ value: name, label: name }));
-  }, [items]);
+  }, [allCategories, items]);
 
   const norm = (s: string) => s.normalize("NFKD").toLowerCase();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_all_categories');
+        if (!cancelled && !error && Array.isArray(data)) {
+          const list = (data as any[])
+            .map((row) => typeof row === 'string' ? row : (row?.name ?? row?.display_name ?? row?.label ?? ''))
+            .filter((v) => typeof v === 'string' && v.trim().length > 0);
+          const uniq = Array.from(new Set(list));
+          setAllCategories(uniq);
+          return;
+        }
+      } catch {}
+      try {
+        const { data } = await supabase.from('categories').select('display_name, name, active, is_active');
+        if (!cancelled && Array.isArray(data)) {
+          const list = data
+            .filter((r: any) => r && (r.active === true || r.is_active === true || (r.active == null && r.is_active == null)))
+            .map((r: any) => String(r.display_name || r.name || ''))
+            .filter((v: string) => v.trim().length > 0);
+          const uniq = Array.from(new Set(list));
+          setAllCategories(uniq);
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const combinedPool = useMemo(() => {
     const q = norm(query.trim());
