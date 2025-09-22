@@ -170,9 +170,11 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<{ id: string; email: string; role: string }> {
-    const response = await this.request<{ user: { id: string; email: string; role: string } }>('/auth/me');
+    const response = await this.request<any>('/auth/me');
     if (response.success && response.data) {
-      return response.data.user;
+      // Support both { data: { user: {...} } } and { data: {...} }
+      const user = response.data.user || response.data;
+      if (user && user.id && user.email) return user;
     }
     throw new Error(response.error || 'Failed to get current user');
   }
