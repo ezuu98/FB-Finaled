@@ -1,5 +1,7 @@
 "use client"
 
+'use client'
+
 import { LoginPage } from "@/components/login-page"
 import { InventoryDashboard } from "@/components/inventory-dashboard"
 import { useAuth } from "@/hooks/use-auth"

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
-import './globals.css'
+import '../styles/globals.css'
+import type { Metadata } from 'next'
+import React from 'react'
 
 export const metadata: Metadata = {
   title: 'Fresh Basket',
@@ -14,7 +16,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="min-h-screen bg-background text-foreground">
+        {children}
+      </body>
     </html>
   )
 }

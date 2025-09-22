@@ -1,7 +1,7 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase-client";
 
-type Item = { id: string; label: string; code?: string | null; category?: string | null };
+type Item = { id: string; label: string; code?: string | null; category?: string | null; category_id?: number | null };
 
 type Warehouse = { id: number; display_name: string };
 
@@ -61,14 +61,29 @@ function ChipMultiSelect({
 
   const remove = (val: string) => onChange(selected.filter((v) => v !== val));
 
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onDocMouseDown = (e: MouseEvent) => {
+      const el = wrapperRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && !el.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
   return (
     <div
+      ref={wrapperRef}
       className="relative"
-      onFocus={() => setOpen(true)}
-      onBlur={(e) => {
-        const rt = e.relatedTarget as Node | null;
-        if (!rt || !e.currentTarget.contains(rt)) setOpen(false);
-      }}
     >
       <label htmlFor={id} className="block text-sm font-medium text-gray-700">
         {label}
@@ -76,6 +91,8 @@ function ChipMultiSelect({
       <button
         id={id}
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="mt-2 flex w-full min-h-[42px] flex-wrap items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
       >
@@ -161,9 +178,17 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const [toDate, setToDate] = useState("");
   const [selectedMovements, setSelectedMovements] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [allCategories, setAllCategories] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<Option[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // When categories are selected but no explicit products are selected yet,
+  // automatically select all products in those categories for reporting.
+  useEffect(() => {
+    if (selectedCategories.length > 0 && !selectAll && selected.length === 0) {
+      setSelectAll(true);
+    }
+  }, [selectedCategories, selectAll, selected]);
   type ReportRow = { warehouseId: string; productId: string; moves: Record<string, number> };
   type Report = { rows: ReportRow[]; totals: Record<string, number> } | null;
   const [report, setReport] = useState<Report>(null);
@@ -171,6 +196,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   type AsOfReport = { rows: AsOfRow[]; totals: Record<string, number> } | null;
   const [asOfReport, setAsOfReport] = useState<AsOfReport>(null);
   const [page, setPage] = useState(1);
+  const [info, setInfo] = useState<string | null>(null);
   const fmt = (value: unknown) => {
     const n = Number(value);
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
@@ -223,13 +249,26 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   );
 
   const categoryOptions: Option[] = useMemo(() => {
-    const base = allCategories.length
-      ? allCategories
-      : Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
-    return base
-      .slice()
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => ({ value: name, label: name }));
+    // Use DB-provided categories first to ensure label=display_name and value=categ_id
+    if (allCategories.length > 0) {
+      return allCategories.slice().sort((a, b) => a.label.localeCompare(b.label));
+    }
+    // Fallback: build from items when DB list not available
+    const byItems = new Map<string, string>();
+    for (const it of items) {
+      if (it.category_id != null) {
+        const idStr = String(it.category_id);
+        if (!byItems.has(idStr)) byItems.set(idStr, it.category ?? idStr);
+      }
+    }
+    if (byItems.size > 0) {
+      return Array.from(byItems.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    // Last resort: derive by category name only (no ids)
+    const names = Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
+    return names.map((name) => ({ value: name, label: name }));
   }, [allCategories, items]);
 
   const norm = (s: string) => s.normalize("NFKD").toLowerCase();
@@ -238,24 +277,32 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await supabase.rpc('get_all_categories');
+        // Prefer exact id/name fields
+        const { data, error } = await supabase.from('categories').select('categ_id, display_name');
         if (!cancelled && !error && Array.isArray(data)) {
-          const list = (data as any[])
-            .map((row) => typeof row === 'string' ? row : (row?.name ?? row?.display_name ?? row?.label ?? ''))
-            .filter((v) => typeof v === 'string' && v.trim().length > 0);
-          const uniq = Array.from(new Set(list));
+          const opts: Option[] = data
+            .filter((r: any) => r && r.categ_id != null)
+            .map((r: any) => ({ value: String(r.categ_id), label: String(r.display_name || r.categ_id) }));
+          // De-duplicate by value
+          const seen = new Set<string>();
+          const uniq = opts.filter((o) => (seen.has(o.value) ? false : (seen.add(o.value), true)));
           setAllCategories(uniq);
           return;
         }
       } catch {}
       try {
-        const { data } = await supabase.from('categories').select('display_name, complete_name, name');
+        // Fallback to RPC; attempt to find id-like fields
+        const { data } = await supabase.rpc('get_all_categories');
         if (!cancelled && Array.isArray(data)) {
-          const list = data
-            .map((r: any) => String(r.display_name || r.complete_name || r.name || ''))
-            .filter((v: string) => v.trim().length > 0);
-          const uniq = Array.from(new Set(list));
+          const opts: Option[] = (data as any[]).map((row) => {
+            const id = row?.categ_id ?? row?.id ?? row?.category_id ?? row?.value ?? row?.key ?? null;
+            const label = row?.display_name ?? row?.name ?? row?.label ?? row?.complete_name ?? (id != null ? String(id) : 'Unknown');
+            return id != null ? { value: String(id), label: String(label) } : null;
+          }).filter(Boolean) as Option[];
+          const seen = new Set<string>();
+          const uniq = opts.filter((o) => (seen.has(o.value) ? false : (seen.add(o.value), true)));
           setAllCategories(uniq);
+          return;
         }
       } catch {}
     })();
@@ -267,7 +314,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const combinedPool = useMemo(() => {
     const q = norm(query.trim());
     const base = selectedCategories.length
-      ? items.filter((i) => !!i.category && selectedCategories.includes(String(i.category)))
+      ? items.filter((i) => i.category_id != null && selectedCategories.includes(String(i.category_id)))
       : items;
     if (!q) return base;
     return base.filter((i) => norm(i.label).startsWith(q) || norm(i.code ?? "").startsWith(q));
@@ -277,7 +324,8 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
 
   const onComboChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const ids = Array.from(e.currentTarget.selectedOptions).map((o) => o.value);
-    setSelected((prev) => Array.from(new Set([...prev, ...ids])));
+    if (selectAll) setSelectAll(false);
+    setSelected(ids);
   };
 
   const baseSelectedSet = useMemo(() => new Set(selected), [selected]);
@@ -388,9 +436,9 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     moves: string[],
     fromTs: string | null,
     toTs: string | null,
+    chunkSize: number = 100,
   ) => {
-    const CHUNK_SIZE = 250;
-    const chunks = chunk(pids, CHUNK_SIZE);
+    const chunks = chunk(pids, Math.max(10, chunkSize));
     const allRows: any[] = [];
     for (const c of chunks) {
       const { data, error } = await supabase.rpc("get_product_movement_report", {
@@ -419,9 +467,9 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     wids: number[],
     fromDateStr: string | null,
     toDateStr: string | null,
+    chunkSize: number = 100,
   ) => {
-    const CHUNK_SIZE = 250;
-    const chunks = chunk(pids, CHUNK_SIZE);
+    const chunks = chunk(pids, Math.max(10, chunkSize));
     const allRows: any[] = [];
     for (const c of chunks) {
       const { data, error } = await supabase.rpc("get_product_as_of_report", {
@@ -494,6 +542,21 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
               className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
               value={comboSelectValue}
               onChange={onComboChange}
+              onMouseDown={(e) => {
+                const t = e.target as HTMLElement | null;
+                if (t && t.tagName === 'OPTION') {
+                  e.preventDefault();
+                  const val = (t as HTMLOptionElement).value;
+                  if (selectAll) {
+                    // Convert implicit "all in category" selection to explicit list minus clicked
+                    const next = Array.from(unionIds).filter((id) => id !== val);
+                    setSelected(next);
+                    setSelectAll(false);
+                  } else {
+                    setSelected((prev) => prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val]);
+                  }
+                }
+              }}
             >
               {combinedPool.map((it) => {
                 const isSel = selectedSet.has(it.id);
@@ -510,13 +573,22 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
       </div>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-4">
-        <ChipMultiSelect
-          id="wh-multi"
-          label="Warehouses"
-          options={warehouseOptions}
-          selected={selectedWarehouses}
-          onChange={setSelectedWarehouses}
-        />
+        <div>
+          <label htmlFor="warehouse-single" className="block text-sm font-medium text-gray-700">
+            Warehouse
+          </label>
+          <select
+            id="warehouse-single"
+            className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
+            value={selectedWarehouses[0] ?? ""}
+            onChange={(e) => setSelectedWarehouses(e.target.value ? [e.target.value] : [])}
+          >
+            <option value="">Select a warehouse...</option>
+            {warehouseOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
         <ChipMultiSelect
           id="move-multi"
           label="Type of movement"
@@ -555,6 +627,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
           onClick={async () => {
             setLoading(true);
             setError(null);
+            setInfo(null);
             setReport(null);
             setAsOfReport(null);
             try {
@@ -564,15 +637,44 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
 
               const pids = toNumericIds(selectedSet);
               const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
-              const fromTs = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : null;
-              const toTs = toDate ? (() => { const d = new Date(`${toDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString(); })() : null;
+              let fromTs = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : null;
+              let toTs = toDate ? (() => { const d = new Date(`${toDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString(); })() : null;
 
-              const rep = await fetchMovementBatched(pids, wids, selectedMovements, fromTs, toTs);
-              setReport(rep);
+              // Default to last 30 days if no range provided
+              if (!fromTs && !toTs) {
+                const now = new Date();
+                const start = new Date(now);
+                start.setUTCDate(start.getUTCDate() - 30);
+                fromTs = start.toISOString();
+                toTs = now.toISOString();
+                setInfo("No date range provided. Using last 30 days.");
+              }
+
+              const chunkPlan = [100, 50, 25];
+              let lastErr: any = null;
+              for (const size of chunkPlan) {
+                try {
+                  const rep = await fetchMovementBatched(pids, wids, selectedMovements, fromTs, toTs, size);
+                  setReport(rep);
+                  lastErr = null;
+                  break;
+                } catch (err: any) {
+                  lastErr = err;
+                  if (!/statement timeout/i.test(String(err?.message || err))) throw err;
+                }
+              }
+              if (lastErr) {
+                // Final fallback: narrow to last 7 days
+                const now = new Date();
+                const start = new Date(now);
+                start.setUTCDate(start.getUTCDate() - 7);
+                const rep = await fetchMovementBatched(pids, wids, selectedMovements, start.toISOString(), now.toISOString(), 25);
+                setInfo("The query was heavy. Showing last 7 days.");
+                setReport(rep);
+              }
             } catch (e: any) {
               const msg = String(e?.message || e || "");
-              if (/statement timeout/i.test(msg)) setError("Query timed out. Try narrowing the date range or fewer products.");
-              else setError(msg || "Something went wrong");
+              setError(msg || "Something went wrong");
             } finally {
               setLoading(false);
             }
@@ -587,6 +689,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
           onClick={async () => {
             setLoading(true);
             setError(null);
+            setInfo(null);
             setReport(null);
             setAsOfReport(null);
             try {
@@ -596,12 +699,27 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
               const pids = toNumericIds(selectedSet);
               const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
 
-              const rep = await fetchAsOfBatched(pids, wids, '2025-07-01', toDate || null);
+              // Use a reasonable default start date (last 90 days) if not provided
+              let fromStr = fromDate || (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 90); return d.toISOString().slice(0,10); })();
+              const rep = await fetchAsOfBatched(pids, wids, fromStr, toDate || null, 100);
               setAsOfReport(rep);
             } catch (e: any) {
               const msg = String(e?.message || e || "");
-              if (/statement timeout/i.test(msg)) setError("Query timed out. Try fewer products or a shorter range.");
-              else setError(msg || "Something went wrong");
+              if (/statement timeout/i.test(msg)) {
+                try {
+                  // Retry with smaller chunks
+                  const pids = toNumericIds(selectedSet);
+                  const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+                  let fromStr = fromDate || (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 30); return d.toISOString().slice(0,10); })();
+                  const rep = await fetchAsOfBatched(pids, wids, fromStr, toDate || null, 25);
+                  setInfo("The query was heavy. Using a shorter window.");
+                  setAsOfReport(rep);
+                } catch (err: any) {
+                  setError("Query still too heavy. Try fewer products or a shorter range.");
+                }
+              } else {
+                setError(msg || "Something went wrong");
+              }
             } finally {
               setLoading(false);
             }
@@ -718,6 +836,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
         </button>
       </div>
 
+      {info && <p className="mt-3 text-sm text-blue-700">{info}</p>}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       {(report || asOfReport) && (

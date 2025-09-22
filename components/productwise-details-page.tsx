@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type Warehouse = { id: number; display_name: string };
 
-type Item = { id: string; label: string; code?: string | null; category?: string | null };
+type Item = { id: string; label: string; code?: string | null; category?: string | null; category_id?: number | null };
 
 function productLabel(row: Record<string, any>) {
   return row.name ?? String(row.id ?? "Unknown");
@@ -92,7 +92,7 @@ export default function ProductWiseDetailsPageClient() {
         const mapped: Item[] = allProducts.map((p: any, index: number) => {
           // Create a more robust unique ID
           let uniqueId: string;
-          
+
           // Check for odoo_id or id with proper null/undefined checking
           if (p.odoo_id != null && p.odoo_id !== '') {
             uniqueId = String(p.odoo_id);
@@ -105,12 +105,15 @@ export default function ProductWiseDetailsPageClient() {
 
           const label = productLabel(p);
           const code = productCode(p);
-          
+          const categoryId = p.category_id ?? p.categ_id ?? p.category?.id ?? null;
+          const categoryName = p.display_name ?? p.category?.display_name ?? p.category?.name ?? null;
+
           return {
             id: uniqueId,
             label: label,
             code: code,
-            category: p.display_name ?? null,
+            category: categoryName,
+            category_id: categoryId != null ? Number(categoryId) : null,
           };
         });
 
