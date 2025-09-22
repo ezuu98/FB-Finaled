@@ -101,17 +101,29 @@ class ApiClient {
 
     try {
       const response = await fetch(url, {
+        cache: 'no-store',
         ...options,
         headers,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+      let data: any = null;
+      try {
+        data = await response.clone().json();
+      } catch {
+        try {
+          const text = await response.text();
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
       }
 
-      return data;
+      if (!response.ok) {
+        const message = (data && (data.error || data.message)) || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(message);
+      }
+
+      return (data as ApiResponse<T>) || { success: true } as any;
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
