@@ -76,7 +76,7 @@ export function InventoryDashboard() {
   const fetchLastSyncTimestamp = async () => {
     try {
       setLastSyncLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/sync/status`, {
+      const response = await fetch('/api/sync/status', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
@@ -144,7 +144,7 @@ export function InventoryDashboard() {
     try {
       // Call the sync API endpoint
       const sinceParam = syncSince ? `?since=${encodeURIComponent(new Date(syncSince).toISOString())}` : '';
-      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + '/sync/all' + sinceParam, {
+      const response = await fetch('/api/sync/all' + sinceParam, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
