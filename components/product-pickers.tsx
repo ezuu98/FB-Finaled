@@ -196,6 +196,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   type AsOfReport = { rows: AsOfRow[]; totals: Record<string, number> } | null;
   const [asOfReport, setAsOfReport] = useState<AsOfReport>(null);
   const [page, setPage] = useState(1);
+  const [info, setInfo] = useState<string | null>(null);
   const fmt = (value: unknown) => {
     const n = Number(value);
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
@@ -435,9 +436,9 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     moves: string[],
     fromTs: string | null,
     toTs: string | null,
+    chunkSize: number = 100,
   ) => {
-    const CHUNK_SIZE = 250;
-    const chunks = chunk(pids, CHUNK_SIZE);
+    const chunks = chunk(pids, Math.max(10, chunkSize));
     const allRows: any[] = [];
     for (const c of chunks) {
       const { data, error } = await supabase.rpc("get_product_movement_report", {
@@ -466,9 +467,9 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     wids: number[],
     fromDateStr: string | null,
     toDateStr: string | null,
+    chunkSize: number = 100,
   ) => {
-    const CHUNK_SIZE = 250;
-    const chunks = chunk(pids, CHUNK_SIZE);
+    const chunks = chunk(pids, Math.max(10, chunkSize));
     const allRows: any[] = [];
     for (const c of chunks) {
       const { data, error } = await supabase.rpc("get_product_as_of_report", {
@@ -626,6 +627,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
           onClick={async () => {
             setLoading(true);
             setError(null);
+            setInfo(null);
             setReport(null);
             setAsOfReport(null);
             try {
@@ -635,15 +637,44 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
 
               const pids = toNumericIds(selectedSet);
               const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
-              const fromTs = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : null;
-              const toTs = toDate ? (() => { const d = new Date(`${toDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString(); })() : null;
+              let fromTs = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : null;
+              let toTs = toDate ? (() => { const d = new Date(`${toDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString(); })() : null;
 
-              const rep = await fetchMovementBatched(pids, wids, selectedMovements, fromTs, toTs);
-              setReport(rep);
+              // Default to last 30 days if no range provided
+              if (!fromTs && !toTs) {
+                const now = new Date();
+                const start = new Date(now);
+                start.setUTCDate(start.getUTCDate() - 30);
+                fromTs = start.toISOString();
+                toTs = now.toISOString();
+                setInfo("No date range provided. Using last 30 days.");
+              }
+
+              const chunkPlan = [100, 50, 25];
+              let lastErr: any = null;
+              for (const size of chunkPlan) {
+                try {
+                  const rep = await fetchMovementBatched(pids, wids, selectedMovements, fromTs, toTs, size);
+                  setReport(rep);
+                  lastErr = null;
+                  break;
+                } catch (err: any) {
+                  lastErr = err;
+                  if (!/statement timeout/i.test(String(err?.message || err))) throw err;
+                }
+              }
+              if (lastErr) {
+                // Final fallback: narrow to last 7 days
+                const now = new Date();
+                const start = new Date(now);
+                start.setUTCDate(start.getUTCDate() - 7);
+                const rep = await fetchMovementBatched(pids, wids, selectedMovements, start.toISOString(), now.toISOString(), 25);
+                setInfo("The query was heavy. Showing last 7 days.");
+                setReport(rep);
+              }
             } catch (e: any) {
               const msg = String(e?.message || e || "");
-              if (/statement timeout/i.test(msg)) setError("Query timed out. Try narrowing the date range or fewer products.");
-              else setError(msg || "Something went wrong");
+              setError(msg || "Something went wrong");
             } finally {
               setLoading(false);
             }
@@ -658,6 +689,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
           onClick={async () => {
             setLoading(true);
             setError(null);
+            setInfo(null);
             setReport(null);
             setAsOfReport(null);
             try {
@@ -667,12 +699,27 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
               const pids = toNumericIds(selectedSet);
               const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
 
-              const rep = await fetchAsOfBatched(pids, wids, '2025-07-01', toDate || null);
+              // Use a reasonable default start date (last 90 days) if not provided
+              let fromStr = fromDate || (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 90); return d.toISOString().slice(0,10); })();
+              const rep = await fetchAsOfBatched(pids, wids, fromStr, toDate || null, 100);
               setAsOfReport(rep);
             } catch (e: any) {
               const msg = String(e?.message || e || "");
-              if (/statement timeout/i.test(msg)) setError("Query timed out. Try fewer products or a shorter range.");
-              else setError(msg || "Something went wrong");
+              if (/statement timeout/i.test(msg)) {
+                try {
+                  // Retry with smaller chunks
+                  const pids = toNumericIds(selectedSet);
+                  const wids = selectedWarehouses.map((v) => (Number(v) || v)).map(Number).filter((n) => Number.isFinite(n)) as number[];
+                  let fromStr = fromDate || (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 30); return d.toISOString().slice(0,10); })();
+                  const rep = await fetchAsOfBatched(pids, wids, fromStr, toDate || null, 25);
+                  setInfo("The query was heavy. Using a shorter window.");
+                  setAsOfReport(rep);
+                } catch (err: any) {
+                  setError("Query still too heavy. Try fewer products or a shorter range.");
+                }
+              } else {
+                setError(msg || "Something went wrong");
+              }
             } finally {
               setLoading(false);
             }
@@ -789,6 +836,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
         </button>
       </div>
 
+      {info && <p className="mt-3 text-sm text-blue-700">{info}</p>}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       {(report || asOfReport) && (
