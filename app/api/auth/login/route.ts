@@ -9,10 +9,12 @@ export async function POST(req: Request) {
     bodyText = '';
   }
 
+  const auth = req.headers.get('authorization') || '';
   const upstream = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(auth ? { Authorization: auth } : {}),
     },
     body: bodyText,
     cache: 'no-store',
