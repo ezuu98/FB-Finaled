@@ -16,10 +16,10 @@ const nextConfig = {
   async rewrites() {
     const base = API_BASE.replace(/\/$/, '');
     return [
-      {
-        source: '/api/:path*',
-        destination: `${base}/:path*`,
-      },
+      { source: '/api/auth/:path*', destination: `${base}/auth/:path*` },
+      { source: '/api/inventory/:path*', destination: `${base}/inventory/:path*` },
+      { source: '/api/sync/:path*', destination: `${base}/sync/:path*` },
+      { source: '/api/stock-corrections/:path*', destination: `${base}/stock-corrections/:path*` },
     ];
   },
 };
