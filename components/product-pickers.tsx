@@ -541,6 +541,15 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
               className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
               value={comboSelectValue}
               onChange={onComboChange}
+              onMouseDown={(e) => {
+                const t = e.target as HTMLElement | null;
+                if (t && t.tagName === 'OPTION') {
+                  e.preventDefault();
+                  const val = (t as HTMLOptionElement).value;
+                  if (selectAll) setSelectAll(false);
+                  setSelected((prev) => prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val]);
+                }
+              }}
             >
               {combinedPool.map((it) => {
                 const isSel = selectedSet.has(it.id);
