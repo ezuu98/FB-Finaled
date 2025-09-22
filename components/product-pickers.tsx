@@ -546,8 +546,14 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
                 if (t && t.tagName === 'OPTION') {
                   e.preventDefault();
                   const val = (t as HTMLOptionElement).value;
-                  if (selectAll) setSelectAll(false);
-                  setSelected((prev) => prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val]);
+                  if (selectAll) {
+                    // Convert implicit "all in category" selection to explicit list minus clicked
+                    const next = Array.from(unionIds).filter((id) => id !== val);
+                    setSelected(next);
+                    setSelectAll(false);
+                  } else {
+                    setSelected((prev) => prev.includes(val) ? prev.filter((id) => id !== val) : [...prev, val]);
+                  }
                 }
               }}
             >
