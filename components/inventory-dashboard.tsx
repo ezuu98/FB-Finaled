@@ -84,8 +84,11 @@ export function InventoryDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data.metadata) {
+        const data = await response.clone().json().catch(async () => {
+          const text = await response.text().catch(() => '');
+          try { return JSON.parse(text || '{}'); } catch { return {}; }
+        });
+        if (data.success && data.data?.metadata) {
           // Find the most recent sync timestamp across all data types
           const timestamps = data.data.metadata
             .map((item: any) => item.last_sync_timestamp)
@@ -158,12 +161,16 @@ export function InventoryDashboard() {
       });
       console.log(response)
 
+      const parsed = await response.clone().json().catch(async () => {
+        const text = await response.text().catch(() => '');
+        try { return JSON.parse(text || '{}'); } catch { return {}; }
+      });
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Sync failed with status ${response.status}`);
+        throw new Error(parsed.message || `Sync failed with status ${response.status}`);
       }
 
-      const result = await response.json();
+      const result = parsed;
 
       // Refresh the inventory data after successful sync
       await refetch();
