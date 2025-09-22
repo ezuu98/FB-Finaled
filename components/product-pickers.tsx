@@ -61,14 +61,29 @@ function ChipMultiSelect({
 
   const remove = (val: string) => onChange(selected.filter((v) => v !== val));
 
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onDocMouseDown = (e: MouseEvent) => {
+      const el = wrapperRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && !el.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
   return (
     <div
+      ref={wrapperRef}
       className="relative"
-      onFocus={() => setOpen(true)}
-      onBlur={(e) => {
-        const rt = e.relatedTarget as Node | null;
-        if (!rt || !e.currentTarget.contains(rt)) setOpen(false);
-      }}
     >
       <label htmlFor={id} className="block text-sm font-medium text-gray-700">
         {label}
@@ -76,6 +91,8 @@ function ChipMultiSelect({
       <button
         id={id}
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="mt-2 flex w-full min-h-[42px] flex-wrap items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
       >
