@@ -392,7 +392,7 @@ export function SkuDetailView({ sku, onBack }: SkuDetailViewProps) {
 
         // STEP 3: Fetch variance within date range (for display in table)
         const varianceResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance-with-totals/${productIdString}?start_date=${dateRange.startDate}&end_date=${dateRange.endDate}`, 
+          `/api/stock-corrections/variance-with-totals/${productIdString}?start_date=${dateRange.startDate}&end_date=${dateRange.endDate}`,
           {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
