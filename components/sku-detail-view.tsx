@@ -373,7 +373,7 @@ export function SkuDetailView({ sku, onBack }: SkuDetailViewProps) {
       try {
         // STEP 2: Fetch variance before date (for opening stock adjustments)
         const varianceBeforeResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance-before-date/${productIdString}?date=${dateRange.startDate}`, 
+          `/api/stock-corrections/variance-before-date/${productIdString}?date=${dateRange.startDate}`,
           {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
