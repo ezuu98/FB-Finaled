@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
 
-type Item = { id: string; label: string; code?: string | null; category?: string | null };
+type Item = { id: string; label: string; code?: string | null; category?: string | null; category_id?: number | null };
 
 type Warehouse = { id: number; display_name: string };
 
@@ -161,7 +161,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const [toDate, setToDate] = useState("");
   const [selectedMovements, setSelectedMovements] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [allCategories, setAllCategories] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<Option[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -231,13 +231,23 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   );
 
   const categoryOptions: Option[] = useMemo(() => {
-    const base = allCategories.length
-      ? allCategories
-      : Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
-    return base
-      .slice()
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => ({ value: name, label: name }));
+    // Prefer building options from items with category_id for exact mapping
+    const byItems = new Map<string, string>();
+    for (const it of items) {
+      if (it.category_id != null) {
+        const idStr = String(it.category_id);
+        if (!byItems.has(idStr)) byItems.set(idStr, it.category ?? idStr);
+      }
+    }
+    if (byItems.size > 0) {
+      return Array.from(byItems.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+    if (allCategories.length > 0) return allCategories.slice().sort((a, b) => a.label.localeCompare(b.label));
+    // Fallback: derive by category name only (no ids)
+    const names = Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
+    return names.map((name) => ({ value: name, label: name }));
   }, [allCategories, items]);
 
   const norm = (s: string) => s.normalize("NFKD").toLowerCase();
@@ -246,24 +256,32 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await supabase.rpc('get_all_categories');
+        // Prefer exact id/name fields
+        const { data, error } = await supabase.from('categories').select('categ_id, display_name');
         if (!cancelled && !error && Array.isArray(data)) {
-          const list = (data as any[])
-            .map((row) => typeof row === 'string' ? row : (row?.name ?? row?.display_name ?? row?.label ?? ''))
-            .filter((v) => typeof v === 'string' && v.trim().length > 0);
-          const uniq = Array.from(new Set(list));
+          const opts: Option[] = data
+            .filter((r: any) => r && r.categ_id != null)
+            .map((r: any) => ({ value: String(r.categ_id), label: String(r.display_name || r.categ_id) }));
+          // De-duplicate by value
+          const seen = new Set<string>();
+          const uniq = opts.filter((o) => (seen.has(o.value) ? false : (seen.add(o.value), true)));
           setAllCategories(uniq);
           return;
         }
       } catch {}
       try {
-        const { data } = await supabase.from('categories').select('display_name, complete_name, name');
+        // Fallback to RPC; attempt to find id-like fields
+        const { data } = await supabase.rpc('get_all_categories');
         if (!cancelled && Array.isArray(data)) {
-          const list = data
-            .map((r: any) => String(r.display_name || r.complete_name || r.name || ''))
-            .filter((v: string) => v.trim().length > 0);
-          const uniq = Array.from(new Set(list));
+          const opts: Option[] = (data as any[]).map((row) => {
+            const id = row?.categ_id ?? row?.id ?? row?.category_id ?? row?.value ?? row?.key ?? null;
+            const label = row?.display_name ?? row?.name ?? row?.label ?? row?.complete_name ?? (id != null ? String(id) : 'Unknown');
+            return id != null ? { value: String(id), label: String(label) } : null;
+          }).filter(Boolean) as Option[];
+          const seen = new Set<string>();
+          const uniq = opts.filter((o) => (seen.has(o.value) ? false : (seen.add(o.value), true)));
           setAllCategories(uniq);
+          return;
         }
       } catch {}
     })();
@@ -275,7 +293,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const combinedPool = useMemo(() => {
     const q = norm(query.trim());
     const base = selectedCategories.length
-      ? items.filter((i) => !!i.category && selectedCategories.includes(String(i.category)))
+      ? items.filter((i) => i.category_id != null && selectedCategories.includes(String(i.category_id)))
       : items;
     if (!q) return base;
     return base.filter((i) => norm(i.label).startsWith(q) || norm(i.code ?? "").startsWith(q));
