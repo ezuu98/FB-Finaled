@@ -556,13 +556,22 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
       </div>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-4">
-        <ChipMultiSelect
-          id="wh-multi"
-          label="Warehouses"
-          options={warehouseOptions}
-          selected={selectedWarehouses}
-          onChange={setSelectedWarehouses}
-        />
+        <div>
+          <label htmlFor="warehouse-single" className="block text-sm font-medium text-gray-700">
+            Warehouse
+          </label>
+          <select
+            id="warehouse-single"
+            className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none"
+            value={selectedWarehouses[0] ?? ""}
+            onChange={(e) => setSelectedWarehouses(e.target.value ? [e.target.value] : [])}
+          >
+            <option value="">Select a warehouse...</option>
+            {warehouseOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
         <ChipMultiSelect
           id="move-multi"
           label="Type of movement"
