@@ -362,7 +362,7 @@ export class StockMovementService {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance/${productId}?start_date=${startDate}&end_date=${endDate}`,
+        `/api/stock-corrections/variance/${productId}?start_date=${startDate}&end_date=${endDate}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
@@ -371,13 +371,15 @@ export class StockMovementService {
         }
       );
 
+      const result = await response.clone().json().catch(async () => {
+        const text = await response.text().catch(() => '');
+        try { return JSON.parse(text || '{}'); } catch { return {}; }
+      });
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(result.error || `HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      
       // Validate response structure
       if (!result.success || !Array.isArray(result.data)) {
         throw new Error('Invalid response format from server');
@@ -418,7 +420,7 @@ export class StockMovementService {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance-with-totals/${productId}?start_date=${startDate}&end_date=${endDate}`,
+        `/api/stock-corrections/variance-with-totals/${productId}?start_date=${startDate}&end_date=${endDate}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
@@ -427,13 +429,15 @@ export class StockMovementService {
         }
       );
 
+      const result = await response.clone().json().catch(async () => {
+        const text = await response.text().catch(() => '');
+        try { return JSON.parse(text || '{}'); } catch { return {}; }
+      });
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(result.error || `HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      
       // Validate response structure
       if (!result.success || !Array.isArray(result.data)) {
         throw new Error('Invalid response format from server');

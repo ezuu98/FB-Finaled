@@ -373,7 +373,7 @@ export function SkuDetailView({ sku, onBack }: SkuDetailViewProps) {
       try {
         // STEP 2: Fetch variance before date (for opening stock adjustments)
         const varianceBeforeResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance-before-date/${productIdString}?date=${dateRange.startDate}`, 
+          `/api/stock-corrections/variance-before-date/${productIdString}?date=${dateRange.startDate}`,
           {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
@@ -383,16 +383,19 @@ export function SkuDetailView({ sku, onBack }: SkuDetailViewProps) {
         );
         
         if (varianceBeforeResponse.ok) {
-          const response = await varianceBeforeResponse.json();
-          if (response.success) {
-            varianceBeforeData = response.data;
+          const parsed = await varianceBeforeResponse.clone().json().catch(async () => {
+            const text = await varianceBeforeResponse.text().catch(() => '');
+            try { return JSON.parse(text || '{}'); } catch { return {}; }
+          });
+          if (parsed.success) {
+            varianceBeforeData = parsed.data;
             setVarianceBeforeDate(varianceBeforeData);
           }
         }
 
         // STEP 3: Fetch variance within date range (for display in table)
         const varianceResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance-with-totals/${productIdString}?start_date=${dateRange.startDate}&end_date=${dateRange.endDate}`, 
+          `/api/stock-corrections/variance-with-totals/${productIdString}?start_date=${dateRange.startDate}&end_date=${dateRange.endDate}`,
           {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
@@ -402,9 +405,12 @@ export function SkuDetailView({ sku, onBack }: SkuDetailViewProps) {
         );
         
         if (varianceResponse.ok) {
-          const response = await varianceResponse.json();
-          if (response.success) {
-            varianceData = response.data;
+          const parsed = await varianceResponse.clone().json().catch(async () => {
+            const text = await varianceResponse.text().catch(() => '');
+            try { return JSON.parse(text || '{}'); } catch { return {}; }
+          });
+          if (parsed.success) {
+            varianceData = parsed.data;
             setStockVarianceData(varianceData);
           }
         }

@@ -76,7 +76,7 @@ export function InventoryDashboard() {
   const fetchLastSyncTimestamp = async () => {
     try {
       setLastSyncLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/sync/status`, {
+      const response = await fetch('/api/sync/status', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
@@ -84,8 +84,11 @@ export function InventoryDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data.metadata) {
+        const data = await response.clone().json().catch(async () => {
+          const text = await response.text().catch(() => '');
+          try { return JSON.parse(text || '{}'); } catch { return {}; }
+        });
+        if (data.success && data.data?.metadata) {
           // Find the most recent sync timestamp across all data types
           const timestamps = data.data.metadata
             .map((item: any) => item.last_sync_timestamp)
@@ -144,7 +147,7 @@ export function InventoryDashboard() {
     try {
       // Call the sync API endpoint
       const sinceParam = syncSince ? `?since=${encodeURIComponent(new Date(syncSince).toISOString())}` : '';
-      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + '/sync/all' + sinceParam, {
+      const response = await fetch('/api/sync/all' + sinceParam, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -158,12 +161,16 @@ export function InventoryDashboard() {
       });
       console.log(response)
 
+      const parsed = await response.clone().json().catch(async () => {
+        const text = await response.text().catch(() => '');
+        try { return JSON.parse(text || '{}'); } catch { return {}; }
+      });
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Sync failed with status ${response.status}`);
+        throw new Error(parsed.message || `Sync failed with status ${response.status}`);
       }
 
-      const result = await response.json();
+      const result = parsed;
 
       // Refresh the inventory data after successful sync
       await refetch();

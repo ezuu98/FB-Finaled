@@ -1,5 +1,5 @@
 // API Client for FreshBasket Backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = typeof window !== 'undefined' ? '/api' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api');
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -101,17 +101,29 @@ class ApiClient {
 
     try {
       const response = await fetch(url, {
+        cache: 'no-store',
         ...options,
         headers,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+      let data: any = null;
+      try {
+        data = await response.clone().json();
+      } catch {
+        try {
+          const text = await response.text();
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
       }
 
-      return data;
+      if (!response.ok) {
+        const message = (data && (data.error || data.message)) || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(message);
+      }
+
+      return (data as ApiResponse<T>) || { success: true } as any;
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
@@ -158,9 +170,11 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<{ id: string; email: string; role: string }> {
-    const response = await this.request<{ user: { id: string; email: string; role: string } }>('/auth/me');
+    const response = await this.request<any>('/auth/me');
     if (response.success && response.data) {
-      return response.data.user;
+      // Support both { data: { user: {...} } } and { data: {...} }
+      const user = response.data.user || response.data;
+      if (user && user.id && user.email) return user;
     }
     throw new Error(response.error || 'Failed to get current user');
   }
@@ -338,4 +352,4 @@ class ApiClient {
 }
 
 // Export singleton instance
-export const apiClient = new ApiClient(); 
+export const apiClient = new ApiClient();
