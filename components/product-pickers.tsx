@@ -164,6 +164,14 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // When categories are selected but no explicit products are selected yet,
+  // automatically select all products in those categories for reporting.
+  useEffect(() => {
+    if (selectedCategories.length > 0 && !selectAll && selected.length === 0) {
+      setSelectAll(true);
+    }
+  }, [selectedCategories, selectAll, selected]);
   type ReportRow = { warehouseId: string; productId: string; moves: Record<string, number> };
   type Report = { rows: ReportRow[]; totals: Record<string, number> } | null;
   const [report, setReport] = useState<Report>(null);
