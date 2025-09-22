@@ -371,13 +371,15 @@ export class StockMovementService {
         }
       );
 
+      const result = await response.clone().json().catch(async () => {
+        const text = await response.text().catch(() => '');
+        try { return JSON.parse(text || '{}'); } catch { return {}; }
+      });
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(result.error || `HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      
       // Validate response structure
       if (!result.success || !Array.isArray(result.data)) {
         throw new Error('Invalid response format from server');
@@ -427,13 +429,15 @@ export class StockMovementService {
         }
       );
 
+      const result = await response.clone().json().catch(async () => {
+        const text = await response.text().catch(() => '');
+        try { return JSON.parse(text || '{}'); } catch { return {}; }
+      });
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(result.error || `HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      
       // Validate response structure
       if (!result.success || !Array.isArray(result.data)) {
         throw new Error('Invalid response format from server');
