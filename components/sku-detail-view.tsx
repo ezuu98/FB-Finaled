@@ -383,9 +383,12 @@ export function SkuDetailView({ sku, onBack }: SkuDetailViewProps) {
         );
         
         if (varianceBeforeResponse.ok) {
-          const response = await varianceBeforeResponse.json();
-          if (response.success) {
-            varianceBeforeData = response.data;
+          const parsed = await varianceBeforeResponse.clone().json().catch(async () => {
+            const text = await varianceBeforeResponse.text().catch(() => '');
+            try { return JSON.parse(text || '{}'); } catch { return {}; }
+          });
+          if (parsed.success) {
+            varianceBeforeData = parsed.data;
             setVarianceBeforeDate(varianceBeforeData);
           }
         }
@@ -402,9 +405,12 @@ export function SkuDetailView({ sku, onBack }: SkuDetailViewProps) {
         );
         
         if (varianceResponse.ok) {
-          const response = await varianceResponse.json();
-          if (response.success) {
-            varianceData = response.data;
+          const parsed = await varianceResponse.clone().json().catch(async () => {
+            const text = await varianceResponse.text().catch(() => '');
+            try { return JSON.parse(text || '{}'); } catch { return {}; }
+          });
+          if (parsed.success) {
+            varianceData = parsed.data;
             setStockVarianceData(varianceData);
           }
         }
