@@ -362,7 +362,7 @@ export class StockMovementService {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance/${productId}?start_date=${startDate}&end_date=${endDate}`,
+        `/api/stock-corrections/variance/${productId}?start_date=${startDate}&end_date=${endDate}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
@@ -418,7 +418,7 @@ export class StockMovementService {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/stock-corrections/variance-with-totals/${productId}?start_date=${startDate}&end_date=${endDate}`,
+        `/api/stock-corrections/variance-with-totals/${productId}?start_date=${startDate}&end_date=${endDate}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
