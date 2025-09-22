@@ -248,7 +248,11 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
   );
 
   const categoryOptions: Option[] = useMemo(() => {
-    // Prefer building options from items with category_id for exact mapping
+    // Use DB-provided categories first to ensure label=display_name and value=categ_id
+    if (allCategories.length > 0) {
+      return allCategories.slice().sort((a, b) => a.label.localeCompare(b.label));
+    }
+    // Fallback: build from items when DB list not available
     const byItems = new Map<string, string>();
     for (const it of items) {
       if (it.category_id != null) {
@@ -261,8 +265,7 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label));
     }
-    if (allCategories.length > 0) return allCategories.slice().sort((a, b) => a.label.localeCompare(b.label));
-    // Fallback: derive by category name only (no ids)
+    // Last resort: derive by category name only (no ids)
     const names = Array.from(new Set(items.map((i) => (i.category ? String(i.category) : "")).filter(Boolean)));
     return names.map((name) => ({ value: name, label: name }));
   }, [allCategories, items]);
