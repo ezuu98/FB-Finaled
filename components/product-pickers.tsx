@@ -323,7 +323,8 @@ export default function ProductPickers({ items, warehouses = [] }: Props) {
 
   const onComboChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const ids = Array.from(e.currentTarget.selectedOptions).map((o) => o.value);
-    setSelected((prev) => Array.from(new Set([...prev, ...ids])));
+    if (selectAll) setSelectAll(false);
+    setSelected(ids);
   };
 
   const baseSelectedSet = useMemo(() => new Set(selected), [selected]);
