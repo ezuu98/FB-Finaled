@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase-client";
 
 type Item = { id: string; label: string; code?: string | null; category?: string | null; category_id?: number | null };
